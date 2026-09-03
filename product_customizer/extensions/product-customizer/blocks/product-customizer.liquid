@@ -1,0 +1,47 @@
+{% if product %}
+  <script src="{{ 'customizer-open.js' | asset_url }}" defer></script>
+  {% render 'customizer-button',
+    product: product,
+    shop: shop,
+    block_id: block.id,
+    button_label: block.settings.button_label,
+    display_mode: block.settings.display_mode,
+    app_url: block.settings.app_url
+  %}
+{% endif %}
+
+{% schema %}
+{
+  "name": "Product Customizer",
+  "target": "section",
+  "stylesheet": "customizer.css",
+  "javascript": "customizer-loader.js",
+  "enabled_on": {
+    "templates": ["product"]
+  },
+  "settings": [
+    {
+      "type": "text",
+      "id": "button_label",
+      "label": "Button label",
+      "default": "Customize Product"
+    },
+    {
+      "type": "select",
+      "id": "display_mode",
+      "label": "Display mode",
+      "options": [
+        { "value": "inline", "label": "Inline" },
+        { "value": "modal", "label": "Fullscreen overlay" }
+      ],
+      "default": "modal"
+    },
+    {
+      "type": "text",
+      "id": "app_url",
+      "label": "App URL fallback",
+      "info": "Leave blank unless the app proxy is unavailable."
+    }
+  ]
+}
+{% endschema %}

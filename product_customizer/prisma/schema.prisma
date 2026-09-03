@@ -1,0 +1,143 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
+// enough when changing adapters.
+// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
+datasource db {
+  provider = "sqlite"
+  url      = "file:dev.sqlite"
+}
+
+model Session {
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+model Store {
+  id            String                 @id @default(cuid())
+  shop          String                 @unique
+  settings      Json?
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+  customizers    ProductCustomizer[]
+  assets         DesignAsset[]
+  templates      CustomizerTemplate[]
+  customizations Customization[]
+}
+
+model ProductCustomizer {
+  id               String         @id @default(cuid())
+  storeId          String
+  store            Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  shopifyProductId String
+  enabled          Boolean        @default(false)
+  name             String
+  configuration    Json
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  views            ProductView[]
+
+  @@unique([storeId, shopifyProductId])
+  @@index([storeId])
+}
+
+model ProductView {
+  id           String      @id @default(cuid())
+  customizerId String
+  customizer   ProductCustomizer @relation(fields: [customizerId], references: [id], onDelete: Cascade)
+  name         String
+  type         String
+  imageUrl     String?
+  sortOrder    Int         @default(0)
+  width        Int         @default(800)
+  height       Int         @default(800)
+  printArea    Json?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  printAreas   PrintArea[]
+
+  @@index([customizerId])
+}
+
+model PrintArea {
+  id            String      @id @default(cuid())
+  productViewId String
+  productView   ProductView @relation(fields: [productViewId], references: [id], onDelete: Cascade)
+  x             Float
+  y             Float
+  width         Float
+  height        Float
+  rotation      Float       @default(0)
+  locked        Boolean     @default(false)
+
+  @@index([productViewId])
+}
+
+model DesignAsset {
+  id           String   @id @default(cuid())
+  storeId      String
+  store        Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  name         String
+  type         String
+  url          String
+  thumbnailUrl String?
+  category     String?
+  metadata     Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([storeId, type])
+  @@index([storeId, category])
+}
+
+model CustomizerTemplate {
+  id            String   @id @default(cuid())
+  storeId       String
+  store         Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  name          String
+  configuration Json
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([storeId])
+}
+
+model Customization {
+  id               String   @id @default(cuid())
+  publicId         String   @unique
+  storeId          String
+  store            Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  shopifyProductId String
+  shopifyVariantId String?
+  customerId       String?
+  configuration    Json
+  previewUrl       String?
+  printFileUrl     String?
+  quantity         Int      @default(1)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([storeId])
+  @@index([storeId, shopifyProductId])
+  @@index([publicId])
+}

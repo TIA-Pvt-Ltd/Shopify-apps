@@ -1,0 +1,20 @@
+<div
+  id="product-customizer-block-{{ block_id }}"
+  class="product-customizer-block"
+  data-product-id="{{ product.id }}"
+  data-product-gid="gid://shopify/Product/{{ product.id }}"
+  data-product-handle="{{ product.handle }}"
+  data-shop="{{ shop.permanent_domain }}"
+  data-variant-id="{{ product.selected_or_first_available_variant.id }}"
+  data-app-url="{{ app_url }}"
+  data-display-mode="{{ display_mode }}"
+  data-button-label="{{ button_label | escape }}"
+>
+  <script type="application/json" data-product-customizer-json>
+    {{ product | json }}
+  </script>
+  <button type="button" class="button button--full-width button--secondary product-customizer-open">
+    {{ button_label }}
+  </button>
+  <div class="product-customizer-mount" hidden></div>
+</div>
