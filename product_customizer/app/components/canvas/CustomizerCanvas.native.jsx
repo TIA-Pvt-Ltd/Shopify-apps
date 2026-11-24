@@ -487,7 +487,7 @@ const NativeCustomizerCanvas = forwardRef(function NativeCustomizerCanvas(
     object.y = clamp(object.y, area.y, Math.max(area.y, maxY));
   };
 
-  const drawObject = (ctx, object) => {
+  const drawObject = (ctx, object, options = {}) => {
     if (object.visible === false) return;
     const box = objectBounds(ctx, object);
     ctx.save();
@@ -571,7 +571,7 @@ const NativeCustomizerCanvas = forwardRef(function NativeCustomizerCanvas(
     }
     ctx.restore();
 
-    if (object.id === selectedIdRef.current) {
+    if (options.selection !== false && object.id === selectedIdRef.current) {
       ctx.save();
       ctx.strokeStyle = "#0f766e";
       ctx.lineWidth = 2;
@@ -612,7 +612,24 @@ const NativeCustomizerCanvas = forwardRef(function NativeCustomizerCanvas(
     }
   };
 
-  const draw = () => {
+  const productDest = () => {
+    const productImage = colorImageRef.current || backgroundRef.current;
+    const { width: w, height: h } = sizeRef.current;
+    if (!productImage?.width || !productImage?.height) {
+      return { x: 0, y: 0, width: w, height: h };
+    }
+    const scale = Math.min(w / productImage.width, h / productImage.height);
+    const width = productImage.width * scale;
+    const height = productImage.height * scale;
+    return {
+      x: (w - width) / 2,
+      y: (h - height) / 2,
+      width,
+      height,
+    };
+  };
+
+  const draw = (options = {}) => {
     const canvas = canvasElRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -620,12 +637,8 @@ const NativeCustomizerCanvas = forwardRef(function NativeCustomizerCanvas(
     ctx.clearRect(0, 0, w, h);
     const productImage = colorImageRef.current || backgroundRef.current;
     if (productImage) {
-      const scale = Math.min(w / productImage.width, h / productImage.height);
-      const dw = productImage.width * scale;
-      const dh = productImage.height * scale;
-      const dx = (w - dw) / 2;
-      const dy = (h - dh) / 2;
-      ctx.drawImage(productImage, dx, dy, dw, dh);
+      const box = productDest();
+      ctx.drawImage(productImage, box.x, box.y, box.width, box.height);
       if (
         propsRef.current.colorMode === "tint" &&
         propsRef.current.productColor &&
@@ -634,13 +647,13 @@ const NativeCustomizerCanvas = forwardRef(function NativeCustomizerCanvas(
         ctx.save();
         ctx.globalCompositeOperation = "multiply";
         ctx.fillStyle = hexToRgba(propsRef.current.productColor, 0.28);
-        ctx.fillRect(dx, dy, dw, dh);
+        ctx.fillRect(box.x, box.y, box.width, box.height);
         ctx.restore();
       }
     }
 
     const area = printAreaRef.current;
-    if (area) {
+    if (options.overlay !== false && area) {
       ctx.save();
       ctx.strokeStyle = "#0f766e";
       ctx.fillStyle = "rgba(15, 118, 110, 0.04)";
@@ -651,7 +664,7 @@ const NativeCustomizerCanvas = forwardRef(function NativeCustomizerCanvas(
       ctx.restore();
     }
 
-    objectsRef.current.forEach((object) => drawObject(ctx, object));
+    objectsRef.current.forEach((object) => drawObject(ctx, object, options));
   };
 
   const select = (object) => {
@@ -1100,8 +1113,27 @@ const NativeCustomizerCanvas = forwardRef(function NativeCustomizerCanvas(
       return printAreaRef.current;
     },
     async exportPreview() {
+      const source = canvasElRef.current;
+      if (!source) return null;
+      draw({ overlay: false, selection: false });
+      const box = productDest();
+      const out = document.createElement("canvas");
+      out.width = Math.max(1, Math.round(box.width));
+      out.height = Math.max(1, Math.round(box.height));
+      const ctx = out.getContext("2d");
+      ctx.drawImage(
+        source,
+        box.x,
+        box.y,
+        box.width,
+        box.height,
+        0,
+        0,
+        out.width,
+        out.height,
+      );
       draw();
-      return canvasElRef.current.toDataURL("image/png");
+      return out.toDataURL("image/png");
     },
     async exportPrintFile({ dpi = 300 } = {}) {
       const area = printAreaRef.current;

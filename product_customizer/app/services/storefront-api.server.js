@@ -10,6 +10,7 @@ import {
   updateCustomization,
 } from "./customization.server";
 import { generatePreview, generatePrintFile } from "./preview.server";
+import { cartLineProperties } from "../utils/cart-add";
 import { fetchProductForCustomizer } from "./shopify-products.server";
 import {
   validateConfigurationPayload,
@@ -194,13 +195,13 @@ export async function handleStorefrontApi(request, path, { shop: shopOverride, c
           cartPayload: {
             id: payload.variantIdNumeric || payload.variantId,
             quantity: Math.max(1, Number(payload.quantity) || 1),
-            properties: {
-              _customizationId: payload.customizationId,
-              "Customization ID": payload.customizationId,
-              _previewUrl: payload.previewUrl || "",
-              Color: payload.color || "",
-              View: payload.viewName || "",
-            },
+            properties: cartLineProperties({
+              publicId: payload.customizationId,
+              previewUrl: payload.previewUrl,
+              color: payload.color,
+              view: payload.viewName,
+              configuration: payload.configuration,
+            }),
           },
         },
         {},

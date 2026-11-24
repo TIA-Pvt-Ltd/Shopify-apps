@@ -458,3 +458,25 @@ body.product-customizer-lock {
   object-fit: contain;
   background: #f6f6f7;
 }
+
+.product-customizer-cart-props {
+  display: block;
+  margin: 0.4rem 0 0;
+  position: relative;
+  z-index: 2;
+  font-size: 1.3rem;
+  line-height: 1.4;
+  color: rgba(18, 18, 18, 0.75);
+}
+
+.product-customizer-preview-link {
+  position: relative;
+  z-index: 3;
+  color: #005bd3;
+  text-decoration: underline;
+  pointer-events: auto;
+}
+
+.product-customizer-preview-link:hover {
+  text-decoration: none;
+}

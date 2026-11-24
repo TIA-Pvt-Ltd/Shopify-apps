@@ -1,7 +1,7 @@
 export function cartPreviewPath(publicId) {
   const id = String(publicId || "").trim();
   if (!id) return "";
-  return `/apps/product-customizer/p/${encodeURIComponent(id)}`;
+  return `/apps/product-customizer/p/${encodeURIComponent(id)}.png`;
 }
 
 export function toStorefrontPreviewUrl(previewUrl, shop) {

@@ -593,6 +593,7 @@ export default function CustomizerApp({
           shop,
           color: selectedColor?.name,
           view: activeView?.name,
+          configuration: saved.configuration,
         }),
       });
 

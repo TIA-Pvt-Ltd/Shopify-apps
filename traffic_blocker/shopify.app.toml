@@ -1,0 +1,32 @@
+# Traffic Blocker Shopify app configuration.
+# https://shopify.dev/docs/apps/build/cli-for-apps/app-configuration
+# Admin API version 2026-10 is the latest stable version as of November 2026.
+
+name = "Traffic Blocker"
+handle = "traffic-blocker"
+client_id = ""
+application_url = "https://localhost:3000"
+embedded = true
+
+[build]
+automatically_update_urls_on_dev = true
+include_config_on_deploy = true
+
+[access_scopes]
+scopes = "read_themes,write_themes"
+
+[auth]
+redirect_urls = [
+  "https://localhost:3000/api/auth/callback"
+]
+
+[webhooks]
+api_version = "2026-10"
+
+  [[webhooks.subscriptions]]
+  topics = ["app/uninstalled", "app_subscriptions/update"]
+  uri = "/api/webhooks/shopify"
+
+  [[webhooks.subscriptions]]
+  compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
+  uri = "/api/webhooks/shopify"

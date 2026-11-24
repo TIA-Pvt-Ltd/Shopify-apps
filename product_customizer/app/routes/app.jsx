@@ -1,7 +1,9 @@
-import { Outlet, useLoaderData, useRouteError } from "react-router";
+import { useEffect } from "react";
+import { Outlet, useLoaderData, useNavigate, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { authenticate } from "../shopify.server";
+import { interceptAdminClicks } from "../utils/admin-navigate";
 import adminStyles from "../styles/admin.css?url";
 
 export const links = () => [{ rel: "stylesheet", href: adminStyles }];
@@ -15,6 +17,9 @@ export const loader = async ({ request }) => {
 
 export default function App() {
   const { apiKey } = useLoaderData();
+  const navigate = useNavigate();
+
+  useEffect(() => interceptAdminClicks(navigate), [navigate]);
 
   return (
     <AppProvider embedded apiKey={apiKey}>

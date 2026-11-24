@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Form, useFetcher, useLoaderData, useNavigate, useNavigation } from "react-router";
+import { Form, Link, useFetcher, useLoaderData, useNavigate, useNavigation } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
@@ -202,9 +202,13 @@ export default function ProductsPage() {
                         size="small"
                       />
                       <s-stack gap="none" className="admin-product-title">
-                        <s-link href={`/app/products/${product.numericId}`}>
+                        <Link
+                          to={`/app/products/${product.numericId}`}
+                          className="admin-product-link"
+                          data-app-to={`/app/products/${product.numericId}`}
+                        >
                           {product.title}
-                        </s-link>
+                        </Link>
                         {product.handle ? (
                           <span className="admin-muted">{product.handle}</span>
                         ) : null}
@@ -222,9 +226,13 @@ export default function ProductsPage() {
                   </s-table-cell>
                   <s-table-cell>
                     <s-stack direction="inline" gap="small-200">
-                      <s-button href={`/app/products/${product.numericId}`} variant="secondary">
+                      <Link
+                        to={`/app/products/${product.numericId}`}
+                        className="admin-configure-btn"
+                        data-app-to={`/app/products/${product.numericId}`}
+                      >
                         Configure
-                      </s-button>
+                      </Link>
                       <fetcher.Form method="post">
                         <input type="hidden" name="productId" value={product.id} />
                         <input type="hidden" name="intent" value={enabled ? "disable" : "enable"} />

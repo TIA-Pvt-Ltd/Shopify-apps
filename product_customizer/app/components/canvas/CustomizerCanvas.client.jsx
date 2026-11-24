@@ -621,9 +621,30 @@ const CustomizerCanvasClient = forwardRef(function CustomizerCanvasClient(
     async exportPreview() {
       const canvas = canvasRef.current;
       if (!canvas) return null;
-      if (overlayRef.current) overlayRef.current.visible = false;
-      const dataUrl = canvas.toDataURL({ format: "png", multiplier: 1 });
-      if (overlayRef.current) overlayRef.current.visible = true;
+      const hidden = [];
+      canvas.getObjects().forEach((object) => {
+        if (object.customType === "printArea" || object.customType === "guide") {
+          hidden.push({ object, visible: object.visible });
+          object.visible = false;
+        }
+      });
+      const previousBackground = canvas.backgroundColor;
+      canvas.backgroundColor = "transparent";
+      const background = backgroundRef.current;
+      const dataUrl = background
+        ? canvas.toDataURL({
+            format: "png",
+            left: background.left || 0,
+            top: background.top || 0,
+            width: background.getScaledWidth(),
+            height: background.getScaledHeight(),
+            multiplier: 1,
+          })
+        : canvas.toDataURL({ format: "png", multiplier: 1 });
+      canvas.backgroundColor = previousBackground;
+      hidden.forEach(({ object, visible }) => {
+        object.visible = visible;
+      });
       canvas.requestRenderAll();
       return dataUrl;
     },

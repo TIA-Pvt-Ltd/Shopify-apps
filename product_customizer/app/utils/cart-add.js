@@ -9,6 +9,32 @@ function clipProperty(value) {
   return text;
 }
 
+function collectCanvasObjects(objects, acc = []) {
+  for (const object of objects || []) {
+    acc.push(object);
+    if (object?.objects) collectCanvasObjects(object.objects, acc);
+  }
+  return acc;
+}
+
+function detailsFromConfiguration(configuration) {
+  const objects = [];
+  for (const view of configuration?.views || []) {
+    collectCanvasObjects(view?.canvas?.objects, objects);
+  }
+  const textObject = objects.find((object) => {
+    const type = String(object?.type || object?.customType || "").toLowerCase();
+    return object?.text && (type.includes("text") || type === "i-text");
+  });
+  return {
+    text: clipProperty(textObject?.text),
+    font: clipProperty(textObject?.fontFamily),
+    fontColor: clipProperty(
+      typeof textObject?.fill === "string" ? textObject.fill : "",
+    ),
+  };
+}
+
 export function variantNumericId(catalogProduct, selectedVariantId) {
   const variants = catalogProduct?.variants || [];
   const selectedNumeric = String(toNumericId(selectedVariantId) || "");
@@ -30,7 +56,14 @@ export function variantNumericId(catalogProduct, selectedVariantId) {
   return numeric;
 }
 
-export function cartLineProperties({ publicId, previewUrl, shop, color, view }) {
+export function cartLineProperties({
+  publicId,
+  previewUrl,
+  shop,
+  color,
+  view,
+  configuration,
+} = {}) {
   const properties = {};
   const customizationId = clipProperty(publicId);
   const preview =
@@ -38,13 +71,21 @@ export function cartLineProperties({ publicId, previewUrl, shop, color, view }) 
     clipProperty(toStorefrontPreviewUrl(previewUrl, shop));
   const colorName = clipProperty(color);
   const viewName = clipProperty(view);
+  const details = detailsFromConfiguration(configuration);
+
   if (customizationId) {
     properties._customizationId = customizationId;
     properties["Customization ID"] = customizationId;
   }
-  if (preview) properties._previewUrl = preview;
+  if (preview) {
+    properties._previewUrl = preview;
+    properties.Preview = "Click to View Image";
+  }
   if (colorName) properties.Color = colorName;
   if (viewName) properties.View = viewName;
+  if (details.text) properties.Text = details.text;
+  if (details.font) properties.Font = details.font;
+  if (details.fontColor) properties["Font color"] = details.fontColor;
   return properties;
 }
 

@@ -1,0 +1,24 @@
+{% if request.design_mode %}
+{% else %}
+  <script
+    src="{{ 'traffic-blocker.js' | asset_url }}"
+    defer
+    data-shop="{{ shop.permanent_domain }}"
+    data-endpoint="{{ app.metafields.traffic_blocker.endpoint.value | default: block.settings.endpoint }}"
+  ></script>
+{% endif %}
+
+{% schema %}
+{
+  "name": "Traffic Blocker",
+  "target": "body",
+  "settings": [
+    {
+      "type": "text",
+      "id": "endpoint",
+      "label": "Traffic Blocker API origin",
+      "info": "Public origin of this app. The embed calls it directly so the visitor IP is preserved."
+    }
+  ]
+}
+{% endschema %}

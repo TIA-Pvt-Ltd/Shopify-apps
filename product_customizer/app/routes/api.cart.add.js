@@ -1,6 +1,7 @@
 import { authenticate } from "../shopify.server";
 import { apiError, apiOk } from "../utils/http";
 import { toNumericId } from "../utils/gid";
+import { cartLineProperties } from "../utils/cart-add";
 
 export const action = async ({ request }) => {
   await authenticate.admin(request);
@@ -13,12 +14,13 @@ export const action = async ({ request }) => {
     cartPayload: {
       id: toNumericId(payload.variantId),
       quantity: Math.max(1, Number(payload.quantity) || 1),
-      properties: {
-        _customizationId: payload.customizationId,
-        "Customization ID": payload.customizationId,
-        _previewUrl: payload.previewUrl || "",
-        Color: payload.color || "",
-      },
+      properties: cartLineProperties({
+        publicId: payload.customizationId,
+        previewUrl: payload.previewUrl,
+        color: payload.color,
+        view: payload.view,
+        configuration: payload.configuration,
+      }),
     },
   });
 };
