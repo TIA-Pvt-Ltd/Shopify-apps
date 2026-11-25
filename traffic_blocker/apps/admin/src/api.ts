@@ -18,13 +18,17 @@ async function sessionToken(): Promise<string | null> {
   }
 }
 
-export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function api<T>(path: string, init: RequestInit = {}, attempt = 0): Promise<T> {
   const headers = new Headers(init.headers);
   if (init.body && !headers.has("content-type")) headers.set("content-type", "application/json");
   const token = await sessionToken();
   if (token) headers.set("authorization", `Bearer ${token}`);
   else if (import.meta.env.DEV) headers.set("x-dev-shop", import.meta.env.VITE_DEV_SHOP ?? "dev-shop.myshopify.com");
   const response = await fetch(path, { ...init, headers });
+  if (response.status === 401 && attempt < 1 && token) {
+    const refreshed = await sessionToken();
+    if (refreshed && refreshed !== token) return api(path, init, attempt + 1);
+  }
   const type = response.headers.get("content-type") ?? "";
   if (type.includes("text/csv")) {
     if (!response.ok) throw new ApiError("Export failed", response.status);

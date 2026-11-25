@@ -20,113 +20,6 @@ body {
   background: var(--tb-canvas);
 }
 
-.Polaris-Navigation__ContextControl {
-  display: block !important;
-  background: transparent !important;
-  margin: 0;
-  min-height: 0;
-  padding: 18px 14px 6px;
-}
-
-.tb-brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  margin: 0;
-  padding: 0 6px 16px;
-  border: 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  background: transparent;
-  color: #f8fafc;
-  text-align: left;
-  cursor: pointer;
-}
-
-.tb-mark {
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  background: linear-gradient(160deg, #2563eb, #1e3a8a);
-  color: #fff;
-  box-shadow: 0 8px 16px rgba(29, 78, 216, 0.28);
-}
-
-.tb-brand-copy {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.15;
-  min-width: 0;
-}
-
-.tb-brand-copy strong {
-  color: #f8fafc;
-  font-size: 14px;
-  letter-spacing: -0.02em;
-}
-
-.tb-brand-copy small {
-  color: #93a4bd;
-  font-size: 11px;
-}
-
-.Polaris-Frame__Navigation {
-  --p-color-nav-bg: #0b1220;
-  --p-color-nav-bg-surface: rgba(255, 255, 255, 0.06);
-  --p-color-nav-bg-surface-hover: rgba(255, 255, 255, 0.08);
-  --p-color-nav-bg-surface-active: rgba(37, 99, 235, 0.45);
-  --p-color-nav-bg-surface-selected: #2563eb;
-  background: var(--tb-nav);
-  border-right: 0;
-}
-
-.Polaris-Navigation,
-.Polaris-Navigation__PrimaryNavigation,
-.Polaris-Navigation__PrimaryNavigation:hover,
-.Polaris-Navigation__PrimaryNavigation:focus-within {
-  background: var(--tb-nav) !important;
-  background-color: var(--tb-nav) !important;
-}
-
-.Polaris-Navigation {
-  padding-top: 8px;
-}
-
-.Polaris-Navigation__SectionHeading,
-.Polaris-Navigation__SectionHeading:hover {
-  color: #93a4bd;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  font-size: 11px;
-}
-
-.Polaris-Navigation__Text,
-.Polaris-Navigation__Item,
-.Polaris-Navigation__Item:hover,
-.Polaris-Navigation__Item:focus,
-.Polaris-Navigation__Item:focus-visible,
-.Polaris-Navigation__ItemInnerWrapper:hover .Polaris-Navigation__Text {
-  color: #e8eef7;
-}
-
-.Polaris-Navigation__Item:hover,
-.Polaris-Navigation__ItemInnerWrapper:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.Polaris-Navigation__Item--selected {
-  background: linear-gradient(90deg, rgba(37, 99, 235, 0.95), rgba(37, 99, 235, 0.55)) !important;
-  box-shadow: inset 3px 0 0 #93c5fd;
-}
-
-.Polaris-Navigation__Item--selected .Polaris-Navigation__Text {
-  color: #fff;
-  font-weight: 650;
-}
-
 .tb-canvas {
   min-height: 100%;
   background:
@@ -136,7 +29,7 @@ body {
 
 .Polaris-Page {
   max-width: 1180px;
-  padding-bottom: 40px;
+  padding-bottom: calc(40px + var(--shopify-safe-area-inset-bottom, 0px));
 }
 
 .Polaris-Page-Header__Title {
@@ -864,6 +757,159 @@ input[type="date"] {
   color: var(--tb-ink);
 }
 
+.tb-asn {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.tb-asn-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.tb-asn-compose {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.75fr);
+}
+
+.tb-asn-compose h2 {
+  margin: 0;
+}
+
+.tb-asn-compose p,
+.tb-asn-head p,
+.tb-asn-empty p {
+  margin: 4px 0 0;
+  color: var(--tb-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.tb-asn-compose > div + div {
+  margin-left: 24px;
+  padding-left: 24px;
+  border-left: 1px solid var(--tb-line);
+}
+
+.tb-asn-field {
+  margin-top: 12px;
+}
+
+.tb-asn-add-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  margin-top: 12px;
+}
+
+.tb-asn-add-row > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.tb-asn-results {
+  margin-top: 16px;
+  padding-top: 4px;
+  border-top: 1px solid var(--tb-line);
+}
+
+.tb-asn-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  padding: 16px 20px 8px;
+}
+
+.tb-asn-list {
+  padding: 0 16px 8px;
+}
+
+.tb-asn-row {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 4px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.tb-asn-row .tb-stack strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.tb-asn-row:last-child {
+  border-bottom: 0;
+}
+
+.tb-asn-id {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  min-height: 28px;
+  padding: 0 8px;
+  border-radius: 8px;
+  background: var(--tb-accent-soft);
+  color: #1e3a8a;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.tb-asn-end {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.tb-asn-count {
+  min-width: 52px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.tb-asn-count strong {
+  display: block;
+  color: var(--tb-ink);
+  font-size: 15px;
+  letter-spacing: -0.03em;
+}
+
+.tb-asn-count span {
+  display: block;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--tb-muted);
+}
+
+.tb-asn-empty {
+  margin: 4px 20px 20px;
+  padding: 28px 18px;
+  border: 1px dashed #d7dee8;
+  border-radius: 14px;
+  background: #f8fafc;
+  text-align: center;
+}
+
+.tb-asn-empty strong {
+  display: block;
+  color: var(--tb-ink);
+  font-size: 15px;
+}
+
+.tb-asn-empty p {
+  max-width: 440px;
+  margin-right: auto;
+  margin-left: auto;
+}
+
 @media (max-width: 700px) {
   .tb-chart { height: 220px; }
   .tb-metric strong { font-size: 22px; }
@@ -871,4 +917,14 @@ input[type="date"] {
   .tb-setting, .tb-form-grid, .tb-plans, .tb-studio { grid-template-columns: 1fr; }
   .tb-mode-grid { grid-template-columns: 1fr 1fr; }
   .tb-stage { position: static; }
+  .tb-asn-metrics,
+  .tb-asn-compose { grid-template-columns: 1fr; }
+  .tb-asn-compose > div + div {
+    margin: 16px 0 0;
+    padding: 16px 0 0;
+    border-left: 0;
+    border-top: 1px solid var(--tb-line);
+  }
+  .tb-asn-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .tb-asn-id { grid-column: 1 / -1; }
 }

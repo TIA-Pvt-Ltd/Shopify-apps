@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseNetwork, ipInCidr, extractClientIp } from "../src/lib/ip.js";
+import { parseNetwork, ipInCidr, extractClientIp, isPrivateIp } from "../src/lib/ip.js";
 import { evaluate, findRuleConflicts, emptyRuleset, isRuleActive, type CompiledRuleset } from "../src/engines/rules.js";
 import { classifyBot, verifyCrawler } from "../src/engines/bot.js";
 import { renderBlockedPage } from "../src/engines/blocked-page.js";
@@ -52,6 +52,10 @@ describe("IP and CIDR", () => {
     expect(ipInCidr("192.168.2.10", "192.168.1.0/24")).toBe(false);
     expect(ipInCidr("2001:db8::1", "2001:db8::/32")).toBe(true);
     expect(() => parseNetwork("not-an-ip")).toThrow(/Invalid IP/);
+    expect(isPrivateIp("192.168.29.125")).toBe(true);
+    expect(isPrivateIp("10.0.0.1")).toBe(true);
+    expect(isPrivateIp("203.0.113.10")).toBe(false);
+    expect(isPrivateIp("2405:201:5023:4023:71e7:fe47:561f:e195")).toBe(false);
   });
 
   it("ignores forwarded headers from untrusted sockets", () => {
@@ -220,6 +224,15 @@ describe("shopify verification", () => {
     const token = createSessionToken({ apiKey: "key", secret, shop: "demo.myshopify.com" });
     expect(verifySessionToken(token, "key", secret).shop).toBe("demo.myshopify.com");
     expect(() => verifySessionToken(token, "key", "wrong")).toThrow();
+    const now = 1_700_000_000_000;
+    const barelyExpired = createSessionToken({ apiKey: "key", secret, shop: "demo.myshopify.com", now: now - 65_000, ttlSeconds: 60 });
+    expect(verifySessionToken(barelyExpired, "key", secret, now).shop).toBe("demo.myshopify.com");
+    const expired = createSessionToken({ apiKey: "key", secret, shop: "demo.myshopify.com", now: now - 120_000, ttlSeconds: 60 });
+    expect(() => verifySessionToken(expired, "key", secret, now)).toThrow(/Expired session token/);
+    const slightlyEarly = createSessionToken({ apiKey: "key", secret, shop: "demo.myshopify.com", now: now + 5_000, ttlSeconds: 60 });
+    expect(verifySessionToken(slightlyEarly, "key", secret, now).shop).toBe("demo.myshopify.com");
+    const notYetActive = createSessionToken({ apiKey: "key", secret, shop: "demo.myshopify.com", now: now + 30_000, ttlSeconds: 60 });
+    expect(() => verifySessionToken(notYetActive, "key", secret, now)).toThrow(/not active/);
   });
 });
 

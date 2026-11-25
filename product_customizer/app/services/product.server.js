@@ -142,7 +142,8 @@ export async function upsertCustomizer(storeId, { shopifyProductId, name, enable
       storeId,
       shopifyProductId: productGid,
       name: name || "Customizable product",
-      enabled: Boolean(enabled),
+      // New customizers are storefront-visible by default; merchants can disable later.
+      enabled: enabled === undefined ? true : Boolean(enabled),
       configuration: defaultCustomizerConfiguration(),
     },
     include: { views: { include: viewInclude } },

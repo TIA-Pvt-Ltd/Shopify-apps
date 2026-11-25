@@ -57,7 +57,7 @@ export async function authenticate(req: Request, config: AppConfig): Promise<Sho
     try {
       claims = verifySessionToken(token, config.shopifyApiKey, config.shopifyApiSecret);
     } catch (error) {
-      logger.warn({ err: error }, "session token rejected");
+      logger.warn({ err: error, ...sessionTokenAge(token) }, "session token rejected");
       throw unauthorized("Invalid session token");
     }
     const shop = await Shop.findOne({ shopDomain: claims.shop });
@@ -143,6 +143,17 @@ export function firewallDeps(runtime: AppRuntime): FirewallDeps {
     signingSecret: runtime.config.signingSecret,
     encryptIp: (ip) => (runtime.config.encryptionKey ? encryptSecret(ip, runtime.config.encryptionKey) : undefined),
     sink: { record: (event) => recordLater(event, runtime.redis, runtime.enqueueTraffic) },
+    rememberClient: (shopId, ip) => {
+      if (!runtime.redis || !ip) return;
+      const key = `tb:recent-ips:${shopId}`;
+      void runtime.redis
+        .multi()
+        .lpush(key, ip)
+        .ltrim(key, 0, 19)
+        .expire(key, 7 * 24 * 60 * 60)
+        .exec()
+        .catch((error) => logger.warn({ err: error }, "recent client ip store failed"));
+    },
     onAutoBlock: async (shop, ip) => {
       const { parseNetwork } = await import("../lib/ip.js");
       const { IPBlock } = await import("../models/index.js");
@@ -236,7 +247,22 @@ export function publicSettings(shop: ShopDoc) {
   };
 }
 
+function sessionTokenAge(token: string): { expiredForSeconds?: number } {
+  const body = token.split(".")[1];
+  if (!body) return {};
+  try {
+    const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as { exp?: number };
+    if (!payload.exp) return {};
+    return { expiredForSeconds: Math.round(Date.now() / 1000 - payload.exp) };
+  } catch {
+    return {};
+  }
+}
+
 export function sendError(error: unknown, res: Response): void {
+  if (error instanceof HttpError && error.status === 401) {
+    res.setHeader("X-Shopify-Retry-Invalid-Session-Request", "1");
+  }
   if (error instanceof ZodError) {
     res.status(422).json({ ok: false, error: { code: "VALIDATION_ERROR", message: "Request validation failed", details: error.flatten() } });
     return;

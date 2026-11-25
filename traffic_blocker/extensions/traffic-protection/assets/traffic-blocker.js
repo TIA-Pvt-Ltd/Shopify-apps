@@ -1,5 +1,19 @@
 (function () {
   if (window.Shopify && window.Shopify.designMode) return;
+  // Hide the store immediately while decide runs (in case the theme hold snippet is missing).
+  try {
+    document.documentElement.classList.add("tb-hold");
+    var prior = sessionStorage.getItem("tb_decision");
+    if (prior === "block" || prior === "rate_limit") document.documentElement.classList.add("tb-blocked");
+  } catch (error) {
+    document.documentElement.classList.add("tb-hold");
+  }
+  if (!document.getElementById("tb-hold-style")) {
+    var holdStyle = document.createElement("style");
+    holdStyle.id = "tb-hold-style";
+    holdStyle.textContent = "html.tb-hold,html.tb-blocked{background:#0f172a!important}html.tb-hold body,html.tb-blocked body{display:none!important}";
+    (document.head || document.documentElement).appendChild(holdStyle);
+  }
   installAnalyticsGate();
 
   function installAnalyticsGate() {
@@ -217,23 +231,23 @@
     var root = document.documentElement;
     root.classList.remove("tb-blocked", "tb-hold");
     root.classList.add("tb-decided");
-    var frame = document.getElementById("tb-block-frame");
-    if (frame) frame.remove();
     if (allowAnalytics !== false) releaseAnalytics();
   }
 
   function showBlocked(html) {
-    var root = document.documentElement;
-    root.classList.add("tb-decided", "tb-blocked", "tb-hold");
-    var frame = document.getElementById("tb-block-frame");
-    if (!frame) {
-      frame = document.createElement("iframe");
-      frame.id = "tb-block-frame";
-      frame.setAttribute("title", "Access restricted");
-      frame.style.cssText = "position:fixed;top:0;right:0;bottom:0;left:0;width:100%;height:100%;border:0;z-index:2147483647;background:#0f172a;";
-      root.appendChild(frame);
+    // Native mode still receives the Shopify HTML first. Replace the whole document
+    // so Inspect Element / view-source scrapers do not keep product markup in the DOM.
+    var payload = html || fallbackPage();
+    try {
+      document.open();
+      document.write(payload);
+      document.close();
+    } catch (error) {
+      var root = document.documentElement;
+      root.classList.add("tb-decided", "tb-blocked", "tb-hold");
+      while (root.firstChild) root.removeChild(root.firstChild);
+      root.insertAdjacentHTML("afterbegin", payload);
     }
-    if (frame.getAttribute("srcdoc") !== html) frame.setAttribute("srcdoc", html);
   }
 
   function fallbackPage() {

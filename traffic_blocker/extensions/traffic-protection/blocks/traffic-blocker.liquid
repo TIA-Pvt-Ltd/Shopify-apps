@@ -1,8 +1,22 @@
 {% if request.design_mode %}
 {% else %}
+  <script>
+    (function () {
+      if (window.Shopify && window.Shopify.designMode) return;
+      var root = document.documentElement;
+      root.classList.add("tb-hold");
+      try {
+        var prior = sessionStorage.getItem("tb_decision");
+        if (prior === "block" || prior === "rate_limit") root.classList.add("tb-blocked");
+      } catch (error) { /* storage can be blocked */ }
+    })();
+  </script>
+  <style>
+    html.tb-hold, html.tb-blocked { background: #0f172a !important; }
+    html.tb-hold body, html.tb-blocked body { display: none !important; }
+  </style>
   <script
     src="{{ 'traffic-blocker.js' | asset_url }}"
-    defer
     data-shop="{{ shop.permanent_domain }}"
     data-endpoint="{{ app.metafields.traffic_blocker.endpoint.value | default: block.settings.endpoint }}"
   ></script>

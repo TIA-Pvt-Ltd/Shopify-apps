@@ -26,6 +26,19 @@ export function normalizeIp(value: string): string | null {
   }
 }
 
+/** True for RFC1918, loopback, link-local, and unique-local addresses that never appear as Cloudflare tunnel client IPs. */
+export function isPrivateIp(value: string): boolean {
+  const normalized = normalizeIp(value);
+  if (!normalized) return false;
+  try {
+    const parsed = ipaddr.parse(normalized);
+    const range = parsed.range();
+    return range === "private" || range === "loopback" || range === "linkLocal" || range === "uniqueLocal" || range === "carrierGradeNat";
+  } catch {
+    return false;
+  }
+}
+
 export function parseNetwork(value: string): ParsedNetwork {
   const trimmed = value.trim();
   if (!trimmed || trimmed.includes(" ")) {

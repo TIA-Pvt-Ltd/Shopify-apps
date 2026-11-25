@@ -9,14 +9,26 @@ import { AuditLog, BotDetection, CustomRule } from "../models/index.js";
 import { assertCapacity, assertScheduleAllowed, effectivePlan } from "../services/plans.js";
 import { activeCount, asyncRoute, audit, currentRuleset, protectionStatus, refresh, shopOf, type AppRuntime } from "../http/shared.js";
 
-function publishedBotSettings(shop: ReturnType<typeof shopOf>): Record<string, unknown> {
+function publishedBotSettings(shop: ReturnType<typeof shopOf>, runtime?: AppRuntime): Record<string, unknown> {
   const bot = shop.settings.bot as { toObject?: () => Record<string, unknown> } | undefined;
   const plain = typeof bot?.toObject === "function" ? bot.toObject() : { ...(bot ?? {}) };
+  const stats = runtime?.intel.stats ?? { vpnCidrs: 0, proxyCidrs: 0, torCidrs: 0, vpnAsns: 0, hostingAsns: 0 };
   return {
     ...plain,
     vpnAction: shop.settings.vpn?.vpnAction ?? "monitor",
     proxyAction: shop.settings.vpn?.proxyAction ?? "monitor",
     torAction: shop.settings.vpn?.torAction ?? "challenge",
+    detection: {
+      vpnCidrs: stats.vpnCidrs,
+      proxyCidrs: stats.proxyCidrs,
+      torCidrs: stats.torCidrs,
+      vpnAsns: stats.vpnAsns,
+      hostingAsns: stats.hostingAsns,
+      vpnReady: stats.vpnCidrs > 0 || stats.vpnAsns > 0,
+      proxyReady: stats.proxyCidrs > 0,
+      torReady: stats.torCidrs > 0,
+      datacenterReady: stats.hostingAsns > 0,
+    },
   };
 }
 
@@ -122,7 +134,7 @@ export function mountRuleRoutes(router: Router, runtime: AppRuntime): void {
 
   router.get("/bots/settings", asyncRoute(async (req, res) => {
     const shop = shopOf(req);
-    sendData(res, publishedBotSettings(shop));
+    sendData(res, publishedBotSettings(shop, runtime));
   }));
 
   router.put("/bots/settings", asyncRoute(async (req, res) => {
@@ -144,7 +156,7 @@ export function mountRuleRoutes(router: Router, runtime: AppRuntime): void {
     shop.markModified("settings");
     await shop.save();
     await refresh(runtime, String(shop._id));
-    sendData(res, publishedBotSettings(shop));
+    sendData(res, publishedBotSettings(shop, runtime));
   }));
 
   router.get("/bots/detections", asyncRoute(async (req, res) => {

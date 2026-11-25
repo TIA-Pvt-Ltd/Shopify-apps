@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Banner, BlockStack, Button, Card, InlineStack, Page, Text, TextField } from "@shopify/polaris";
+import { Banner, Button, Card, Page, Text, TextField } from "@shopify/polaris";
 import { api, withQuery } from "../api";
 
 interface AsnHit {
@@ -42,6 +42,7 @@ export function AsnPage({ notify }: { notify: (message: string) => void }) {
       setAsn("");
       void client.invalidateQueries({ queryKey: ["asns"] });
       notify("ASN rule saved");
+      save.reset();
     },
     onError: (error: Error) => notify(error.message),
   });
@@ -50,6 +51,7 @@ export function AsnPage({ notify }: { notify: (message: string) => void }) {
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: ["asns"] });
       notify("ASN rule removed");
+      remove.reset();
     },
     onError: (error: Error) => notify(error.message),
   });
@@ -57,130 +59,138 @@ export function AsnPage({ notify }: { notify: (message: string) => void }) {
   const manual = Number(asn.replace(/^as/i, ""));
   const manualReady = Number.isInteger(manual) && manual > 0 && !save.isPending;
   const hits = needle.length >= 2 ? search.data ?? [] : [];
+  const blocked = rules.data?.rules ?? [];
+  const observed = rules.data?.observed ?? [];
+  const denied = observed.reduce((sum, row) => sum + row.requests, 0);
   return (
-    <Page title="ASN blocking" subtitle="Organization names come from the bundled directory or from traffic observed by this app.">
-      <BlockStack gap="400">
+    <Page title="ASN blocking" subtitle="Deny every visitor whose IP belongs to a network. The server looks up the ASN. A name is not required for the rule to match.">
+      <div className="tb-asn">
         {rules.isError ? <Banner tone="critical" title={rules.error instanceof Error ? rules.error.message : "Networks could not be loaded"} /> : null}
+        <div className="tb-asn-metrics">
+          <div className="tb-metric"><span>Blocked networks</span><strong>{blocked.length}</strong></div>
+          <div className="tb-metric"><span>Networks seen</span><strong>{observed.length}</strong></div>
+          <div className="tb-metric"><span>Denied visits</span><strong>{denied.toLocaleString()}</strong></div>
+        </div>
         <Card>
-          <BlockStack gap="400">
-            <TextField label="Search ASN or provider" value={q} onChange={setQ} autoComplete="off" placeholder="Cloudflare or 13335" helpText="Type at least two characters." />
-            {needle.length >= 2 && search.isError ? <Banner tone="critical" title={search.error instanceof Error ? search.error.message : "Search failed"} /> : null}
-            {needle.length >= 2 && !search.isError && hits.length === 0 && !search.isLoading ? <Text as="p" tone="subdued">No matching networks.</Text> : null}
-            {hits.length > 0 ? (
-              <div className="tb-table-wrap">
-                <table className="tb-table">
-                  <thead>
-                    <tr>
-                      <th>ASN</th>
-                      <th>Organization</th>
-                      <th>Type</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {hits.map((row) => {
-                      const existing = saved.get(row.asn);
-                      return (
-                        <tr key={row.asn}>
-                          <td><span className="tb-mono">AS{row.asn}</span></td>
-                          <td>{row.organization}</td>
-                          <td><span className={row.hosting ? "tb-pill tb-pill-warn" : "tb-pill tb-pill-muted"}>{row.hosting ? "Hosting" : "Network"}</span></td>
-                          <td>
-                            {existing?.enabled ? <span className="tb-pill tb-pill-block">Blocking</span> : (
-                              <Button
-                                variant="primary"
-                                disabled={save.isPending}
-                                loading={save.isPending && save.variables?.asn === row.asn}
-                                onClick={() => save.mutate({ asn: row.asn, organization: row.organization })}
-                              >
-                                Block
-                              </Button>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+          <div className="tb-asn-compose">
+            <div>
+              <Text as="h2" variant="headingMd">Find a network</Text>
+              <p>Search the directory by provider name or number. Two characters starts the search.</p>
+              <div className="tb-asn-field">
+                <TextField label="Search ASN or provider" labelHidden value={q} onChange={setQ} autoComplete="off" placeholder="Cloudflare or 13335" />
               </div>
-            ) : null}
-            <InlineStack gap="200" blockAlign="end">
-              <div className="tb-filter">
+            </div>
+            <div>
+              <Text as="h2" variant="headingMd">Block by number</Text>
+              <p>Use this when the network is not listed. AS15169 and 15169 are the same rule.</p>
+              <div className="tb-asn-add-row">
                 <TextField label="ASN number" value={asn} onChange={setAsn} autoComplete="off" placeholder="15169" />
+                <Button variant="primary" disabled={!manualReady} loading={save.isPending && save.variables?.asn === manual} onClick={() => save.mutate({ asn: manual })}>Block</Button>
               </div>
-              <Button variant="primary" disabled={!manualReady} loading={save.isPending && save.variables?.asn === manual} onClick={() => save.mutate({ asn: manual })}>Block ASN</Button>
-            </InlineStack>
-          </BlockStack>
+            </div>
+          </div>
+          {needle.length >= 2 ? (
+            <div className="tb-asn-results">
+              {search.isError ? <Banner tone="critical" title={search.error instanceof Error ? search.error.message : "Search failed"} /> : null}
+              {search.isLoading ? <p className="tb-empty">Searching the directory…</p> : null}
+              {!search.isLoading && !search.isError && hits.length === 0 ? <p className="tb-empty">No networks match that search.</p> : null}
+              {hits.map((row) => (
+                <NetworkRow
+                  key={row.asn}
+                  asn={row.asn}
+                  title={row.organization}
+                  meta={row.hosting ? "Hosting network" : "Network"}
+                  action={blockControl(saved.get(row.asn), save.isPending, save.isPending && save.variables?.asn === row.asn, () => save.mutate({ asn: row.asn, organization: row.organization }))}
+                />
+              ))}
+            </div>
+          ) : null}
         </Card>
         <Card padding="0">
-          <div className="tb-card-head">
-            <Text as="h2" variant="headingMd">Blocked networks</Text>
+          <div className="tb-asn-head">
+            <div>
+              <Text as="h2" variant="headingMd">Blocked networks</Text>
+              <p>An enabled rule denies the visit when the lookup returns that number.</p>
+            </div>
           </div>
-          {(rules.data?.rules ?? []).length === 0 ? <p className="tb-empty">No networks are blocked yet.</p> : (
-            <div className="tb-table-wrap">
-              <table className="tb-table tb-events">
-                <thead>
-                  <tr>
-                    <th>ASN</th>
-                    <th>Organization</th>
-                    <th>Status</th>
-                    <th>Blocked</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(rules.data?.rules ?? []).map((rule) => (
-                    <tr key={rule._id}>
-                      <td><span className="tb-mono">AS{rule.asn}</span></td>
-                      <td>{rule.organization || "Unknown organization"}</td>
-                      <td><span className={rule.enabled ? "tb-pill tb-pill-block" : "tb-pill tb-pill-muted"}>{rule.enabled ? "Blocking" : "Disabled"}</span></td>
-                      <td>{rule.blockedCount.toLocaleString()}</td>
-                      <td><Button variant="plain" tone="critical" disabled={remove.isPending} onClick={() => remove.mutate(rule._id)}>Remove</Button></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {rules.isLoading ? <p className="tb-empty">Loading blocked networks…</p> : blocked.length === 0 ? (
+            <div className="tb-asn-empty">
+              <strong>No networks are blocked</strong>
+              <p>Search for a provider or enter an ASN. The next matching visit is denied.</p>
+            </div>
+          ) : (
+            <div className="tb-asn-list">
+              {blocked.map((rule) => (
+                <NetworkRow
+                  key={rule._id}
+                  asn={rule.asn}
+                  title={rule.organization || "Unknown organization"}
+                  meta={rule.enabled ? "Blocking" : "Disabled"}
+                  count={rule.blockedCount}
+                  countLabel="Blocked"
+                  action={<Button variant="plain" tone="critical" loading={remove.isPending && remove.variables === rule._id} disabled={remove.isPending} onClick={() => remove.mutate(rule._id)}>Remove</Button>}
+                />
+              ))}
             </div>
           )}
         </Card>
         <Card padding="0">
-          <div className="tb-card-head">
-            <Text as="h2" variant="headingMd">Seen in traffic</Text>
-            <p>Networks recorded on denied requests. Blocking one here uses the same rule as search.</p>
+          <div className="tb-asn-head">
+            <div>
+              <Text as="h2" variant="headingMd">Seen in traffic</Text>
+              <p>Networks already recorded on denied requests. Blocking one uses the same rule as search.</p>
+            </div>
           </div>
-          {(rules.data?.observed ?? []).length === 0 ? <p className="tb-empty">No network traffic has been recorded yet.</p> : (
-            <div className="tb-table-wrap">
-              <table className="tb-table tb-events">
-                <thead>
-                  <tr>
-                    <th>ASN</th>
-                    <th>Organization</th>
-                    <th>Denied</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(rules.data?.observed ?? []).map((row) => {
-                    const existing = saved.get(row.asn);
-                    return (
-                      <tr key={row.asn}>
-                        <td><span className="tb-mono">AS{row.asn}</span></td>
-                        <td>{row.organization}</td>
-                        <td>{row.requests.toLocaleString()}</td>
-                        <td>
-                          {existing?.enabled ? <span className="tb-pill tb-pill-block">Blocking</span> : (
-                            <Button disabled={save.isPending} loading={save.isPending && save.variables?.asn === row.asn} onClick={() => save.mutate({ asn: row.asn, organization: row.organization })}>Block</Button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+          {rules.isLoading ? <p className="tb-empty">Loading observed networks…</p> : observed.length === 0 ? (
+            <div className="tb-asn-empty">
+              <strong>No networks recorded yet</strong>
+              <p>Denied visits appear here with the ASN the server observed.</p>
+            </div>
+          ) : (
+            <div className="tb-asn-list">
+              {observed.map((row) => (
+                <NetworkRow
+                  key={row.asn}
+                  asn={row.asn}
+                  title={row.organization}
+                  meta="Recorded on a denied request"
+                  count={row.requests}
+                  countLabel="Denied"
+                  action={blockControl(saved.get(row.asn), save.isPending, save.isPending && save.variables?.asn === row.asn, () => save.mutate({ asn: row.asn, organization: row.organization }))}
+                />
+              ))}
             </div>
           )}
         </Card>
-      </BlockStack>
+      </div>
     </Page>
+  );
+}
+
+function blockControl(existing: AsnRule | undefined, pending: boolean, loading: boolean, onBlock: () => void): ReactNode {
+  if (existing?.enabled) return <span className="tb-pill tb-pill-block">Blocking</span>;
+  return <Button variant="primary" disabled={pending} loading={loading} onClick={onBlock}>Block</Button>;
+}
+
+function NetworkRow({ asn, title, meta, count, countLabel, action }: {
+  asn: number;
+  title: string;
+  meta: string;
+  count?: number;
+  countLabel?: string;
+  action: ReactNode;
+}) {
+  return (
+    <div className="tb-asn-row">
+      <span className="tb-asn-id">AS{asn}</span>
+      <div className="tb-stack">
+        <strong>{title}</strong>
+        <span>{meta}</span>
+      </div>
+      <div className="tb-asn-end">
+        {count !== undefined ? <div className="tb-asn-count"><strong>{count.toLocaleString()}</strong><span>{countLabel}</span></div> : null}
+        {action}
+      </div>
+    </div>
   );
 }

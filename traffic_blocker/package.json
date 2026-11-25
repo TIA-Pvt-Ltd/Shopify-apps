@@ -13,11 +13,13 @@
     "dev": "concurrently -n api,admin -c blue,green \"npm run dev -w @traffic-blocker/backend\" \"node scripts/wait-for-api.mjs && npm run dev -w @traffic-blocker/admin\"",
     "dev:api": "npm run dev -w @traffic-blocker/backend",
     "dev:admin": "npm run dev -w @traffic-blocker/admin",
+    "dev:tunnel": "node scripts/dev-tunnel.mjs",
     "worker": "npm run worker -w @traffic-blocker/backend",
     "build": "npm run build -w @traffic-blocker/shared-types && npm run build -w @traffic-blocker/country-data && npm run build -w @traffic-blocker/analytics-utils && npm run build -w @traffic-blocker/rule-schemas && npm run build -w @traffic-blocker/backend && npm run build -w @traffic-blocker/admin && npm run build -w @traffic-blocker/storefront",
     "typecheck": "npm run typecheck -w @traffic-blocker/backend && npm run typecheck -w @traffic-blocker/admin && npm run typecheck -w @traffic-blocker/shared-types && npm run typecheck -w @traffic-blocker/rule-schemas && npm run typecheck -w @traffic-blocker/country-data && npm run typecheck -w @traffic-blocker/analytics-utils",
     "test": "npm run test -w @traffic-blocker/backend",
     "seed:demo": "npm run seed:demo -w @traffic-blocker/backend",
+    "feeds:update": "node scripts/update-intel-feeds.mjs",
     "shopify": "shopify"
   },
   "engines": {

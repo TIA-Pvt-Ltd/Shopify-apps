@@ -50,7 +50,7 @@ export function createApp(runtime: AppRuntime): express.Express {
   const app = express();
   app.disable("x-powered-by");
   app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: { policy: "cross-origin" } }));
-  app.use(cors({ origin: true }));
+  app.use(cors({ origin: true, exposedHeaders: ["X-Shopify-Retry-Invalid-Session-Request"] }));
   app.use("/api/webhooks/shopify", express.raw({ type: "application/json" }));
   app.use(express.json({ limit: "1mb" }));
   app.use(express.text({ type: "text/plain", limit: "1mb" }));

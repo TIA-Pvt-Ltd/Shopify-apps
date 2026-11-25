@@ -8,7 +8,7 @@ import {
   saveCustomizerConfiguration,
   upsertCustomizer,
 } from "../services/product.server";
-import { fetchShopifyProduct } from "../services/shopify-products.server";
+import { fetchShopifyProduct, setCustomizerEnabledMetafield } from "../services/shopify-products.server";
 import { handleAdminAssetUpload } from "../services/storefront-api.server";
 import { validateConfigurationPayload } from "../services/validation.server";
 import ViewConfigurator from "../components/admin/ViewConfigurator";
@@ -30,11 +30,12 @@ export const loader = async ({ request, params }) => {
     shopifyProductId: product.id,
     name: product.title,
   });
+  await setCustomizerEnabledMetafield(admin, product.id, Boolean(customizer.enabled));
   return { product, customizer };
 };
 
 export const action = async ({ request, params }) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const store = await getOrCreateStore(session.shop);
   const contentType = request.headers.get("content-type") || "";
 
@@ -50,6 +51,7 @@ export const action = async ({ request, params }) => {
 
   try {
     const customizer = await saveCustomizerConfiguration(store.id, params.productId, payload);
+    await setCustomizerEnabledMetafield(admin, params.productId, Boolean(customizer?.enabled));
     return { ok: true, customizer };
   } catch (error) {
     logError("admin.saveConfiguration", error);

@@ -103,16 +103,35 @@ export interface IntelResult {
   datacenter: boolean;
 }
 
+export interface IntelligenceStats {
+  vpnCidrs: number;
+  proxyCidrs: number;
+  torCidrs: number;
+  vpnAsns: number;
+  hostingAsns: number;
+}
+
 export interface IntelligenceProvider {
   inspect(ip: string, asn: number | null): IntelResult;
+  stats?: IntelligenceStats;
 }
 
 export class ListIntelligence implements IntelligenceProvider {
+  readonly stats: IntelligenceStats;
+
   constructor(
     private readonly vpnCidrs: string[] = [],
     private readonly proxyCidrs: string[] = [],
     private readonly torCidrs: string[] = [],
-  ) {}
+  ) {
+    this.stats = {
+      vpnCidrs: vpnCidrs.length,
+      proxyCidrs: proxyCidrs.length,
+      torCidrs: torCidrs.length,
+      vpnAsns: VPN_ASNS.size,
+      hostingAsns: HOSTING_ASNS.size,
+    };
+  }
 
   inspect(ip: string, asn: number | null): IntelResult {
     const known = lookupAsn(asn);

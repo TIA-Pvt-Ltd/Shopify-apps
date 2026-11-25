@@ -41,6 +41,24 @@ Open the admin at `http://localhost:5173`. Shopify embedded installs use `shopif
 
 `npm run seed:demo` loads a clearly marked demo shop. It refuses to run when `NODE_ENV=production`.
 
+### Local storefront (Cloudflare tunnel)
+
+Native mode needs a public HTTPS origin so the store can call your local API. Use three terminals:
+
+1. **API + admin** — `npm run dev` and wait until the API is listening on port 3000.
+2. **Tunnel** — `npm run dev:tunnel` (or `npm run dev:tunnel -- your-shop.myshopify.com` to also update the theme).
+3. **Theme sync** (if you did not pass a shop above) — after the tunnel prints a `*.trycloudflare.com` URL:
+
+```bash
+node scripts/install-storefront.mjs your-shop.myshopify.com https://your-tunnel.trycloudflare.com
+```
+
+That upserts the **live** theme with `/storefront/embed.js` from the tunnel origin. Re-run it whenever the quick-tunnel hostname changes.
+
+Hard-refresh the storefront and confirm in DevTools Network: `embed.js` then `POST /api/v1/firewall/decide`.
+
+Do **not** edit `.tools/theme/layout/theme.liquid` expecting the store to change — that folder is a local scratch copy and is not published to Shopify.
+
 ## Enforcement truthfulness
 
 | Mode | Blocks before Shopify | Approved-session analytics | Shopify analytics |

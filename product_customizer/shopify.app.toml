@@ -7,7 +7,7 @@ embedded = true
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "write_products,read_products,read_orders,write_metaobjects,write_metaobject_definitions"
+scopes = "write_products,read_products,read_orders,write_metaobjects,write_metaobject_definitions,write_app_proxy"
 
 [app_proxy]
 url = "/api/proxy"
@@ -21,6 +21,15 @@ description = "Tracks products created by the Shopify app template for developme
 
   [product.metafields.app.demo_info.access]
   admin = "merchant_read_write"
+
+[product.metafields.app.customizer_enabled]
+type = "boolean"
+name = "Customizer enabled"
+description = "Show the Customize Product button on the storefront for this product"
+
+  [product.metafields.app.customizer_enabled.access]
+  admin = "merchant_read"
+  storefront = "public_read"
 
 [metaobjects.app.example]
 name = "Example"
@@ -56,6 +65,7 @@ api_version = "unstable"
   handle = "product-updates"
   topic = "Product"
   actions = ["create", "update", "delete"]
+  triggers = ["product.*"]
   uri = "/events/app/products"
 
 [auth]

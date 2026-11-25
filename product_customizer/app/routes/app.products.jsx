@@ -5,7 +5,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { getOrCreateStore } from "../services/store.server";
 import { getCustomizerMap, setCustomizerEnabled } from "../services/product.server";
-import { fetchShopifyProducts } from "../services/shopify-products.server";
+import { fetchShopifyProducts, setCustomizerEnabledMetafield } from "../services/shopify-products.server";
 import { logError, USER_ERRORS } from "../utils/logger.server";
 
 const PAGE_SIZE = 50;
@@ -59,13 +59,14 @@ export const loader = async ({ request }) => {
 };
 
 export const action = async ({ request }) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const store = await getOrCreateStore(session.shop);
   const formData = await request.formData();
   const productId = String(formData.get("productId") || "");
   const intent = String(formData.get("intent") || "");
   const enabled = intent === "enable";
   await setCustomizerEnabled(store.id, productId, enabled);
+  await setCustomizerEnabledMetafield(admin, productId, enabled);
   return { ok: true, enabled };
 };
 

@@ -74,6 +74,9 @@ export function createSessionToken(input: {
   return `${header}.${body}.${signature}`;
 }
 
+/** Same allowance as @shopify/shopify-api. App Bridge often delivers a token a few seconds from expiry. */
+const SESSION_CLOCK_TOLERANCE_MS = 10_000;
+
 export function verifySessionToken(token: string, apiKey: string, secret: string, now = Date.now()): SessionClaims {
   const [header, body, signature] = token.split(".");
   if (!header || !body || !signature) throw new Error("Malformed session token");
@@ -87,8 +90,8 @@ export function verifySessionToken(token: string, apiKey: string, secret: string
     nbf?: number;
   };
   if (payload.aud !== apiKey) throw new Error("Invalid session audience");
-  if (!payload.exp || payload.exp * 1000 < now) throw new Error("Expired session token");
-  if (payload.nbf && payload.nbf * 1000 > now + 5000) throw new Error("Session token is not active");
+  if (!payload.exp || payload.exp * 1000 < now - SESSION_CLOCK_TOLERANCE_MS) throw new Error("Expired session token");
+  if (payload.nbf && payload.nbf * 1000 > now + SESSION_CLOCK_TOLERANCE_MS) throw new Error("Session token is not active");
   const shop = sanitizeShopDomain(payload.dest);
   if (!shop || !payload.sub) throw new Error("Invalid session shop");
   return { shop, sub: payload.sub };

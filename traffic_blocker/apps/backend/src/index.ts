@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { isAbsolute, resolve } from "node:path";
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import { Server } from "socket.io";
@@ -18,6 +19,15 @@ import { Shop } from "./models/index.js";
 
 loadLocalEnv();
 const config = getConfig();
+const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
+
+function resolveDataPath(configured: string, bundled: string): string {
+  if (configured) {
+    const absolute = isAbsolute(configured) ? configured : resolve(repoRoot, configured);
+    if (existsSync(absolute)) return absolute;
+  }
+  return existsSync(bundled) ? bundled : "";
+}
 
 async function main(): Promise<void> {
   await connectMongo(config.mongoUri);
@@ -44,6 +54,8 @@ async function main(): Promise<void> {
   const bundledGeoDb = fileURLToPath(new URL("../../../data/country.mmdb", import.meta.url));
   const bundledAsnDb = fileURLToPath(new URL("../../../data/asn.mmdb", import.meta.url));
   const bundledVpnList = fileURLToPath(new URL("../../../data/vpn-ipv4.txt", import.meta.url));
+  const bundledProxyList = fileURLToPath(new URL("../../../data/proxy-ipv4.txt", import.meta.url));
+  const bundledTorList = fileURLToPath(new URL("../../../data/tor-ipv4.txt", import.meta.url));
   const geoip = await loadGeoIp(
     config.geoIpCityDb || (existsSync(bundledGeoDb) ? bundledGeoDb : ""),
     config.geoIpAsnDb || (existsSync(bundledAsnDb) ? bundledAsnDb : ""),
@@ -53,13 +65,22 @@ async function main(): Promise<void> {
     country: Boolean(config.geoIpCityDb || existsSync(bundledGeoDb)),
     asn: Boolean(config.geoIpAsnDb || existsSync(bundledAsnDb)),
   }, "GeoIP ready");
-  const vpnFile = config.vpnCidrFile || (existsSync(bundledVpnList) ? bundledVpnList : "");
+  const vpnFile = resolveDataPath(config.vpnCidrFile, bundledVpnList);
+  const proxyFile = resolveDataPath(config.proxyCidrFile, bundledProxyList);
+  const torFile = resolveDataPath(config.torCidrFile, bundledTorList);
   const intel = new ListIntelligence(
     await loadCidrFile(vpnFile).catch(() => []),
-    await loadCidrFile(config.proxyCidrFile).catch(() => []),
-    await loadCidrFile(config.torCidrFile).catch(() => []),
+    await loadCidrFile(proxyFile).catch(() => []),
+    await loadCidrFile(torFile).catch(() => []),
   );
-  logger.info({ vpnRanges: vpnFile ? "configured" : "empty" }, "VPN ranges ready");
+  logger.info({
+    vpnRanges: vpnFile ? "configured" : "empty",
+    proxyRanges: proxyFile ? "configured" : "empty",
+    torRanges: torFile ? "configured" : "empty",
+    vpnCidrs: intel.stats.vpnCidrs,
+    proxyCidrs: intel.stats.proxyCidrs,
+    torCidrs: intel.stats.torCidrs,
+  }, "Intelligence feeds ready");
   const app = createApp({
     config,
     redis: liveRedis,

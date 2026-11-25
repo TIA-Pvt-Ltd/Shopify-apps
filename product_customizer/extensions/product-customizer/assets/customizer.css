@@ -3,6 +3,10 @@
   max-width: 44rem;
 }
 
+.product-customizer-block[hidden] {
+  display: none !important;
+}
+
 .product-customizer-embed {
   position: static;
 }

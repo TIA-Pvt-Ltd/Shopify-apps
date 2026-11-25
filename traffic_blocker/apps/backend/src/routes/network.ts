@@ -21,7 +21,12 @@ export function mountNetworkRoutes(router: Router, runtime: AppRuntime): void {
       IPBlock.countDocuments(filter),
       Whitelist.find({ shopId: shop._id, type: "ip" }).sort({ createdAt: -1 }),
     ]);
-    sendData(res, { blocks, allowlist }, 200, { page, pageSize, total });
+    let recentClients: string[] = [];
+    if (runtime.redis) {
+      const raw = await runtime.redis.lrange(`tb:recent-ips:${String(shop._id)}`, 0, 19);
+      recentClients = [...new Set(raw.filter(Boolean))];
+    }
+    sendData(res, { blocks, allowlist, recentClients }, 200, { page, pageSize, total });
   }));
 
   router.post("/ips", asyncRoute(async (req, res) => {

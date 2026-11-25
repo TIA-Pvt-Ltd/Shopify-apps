@@ -45,9 +45,8 @@ export function OverviewPage() {
             <DateFilters />
             {shop.data?.demo ? <Banner tone="warning" title="Demo shop">These figures were created by the demo seed and are not production traffic.</Banner> : null}
             {status.data ? (
-              <Banner tone={status.data.edge.protectionActive ? "success" : "info"} title={status.data.edge.protectionActive ? "Edge protection is verified" : "Shopify-native protection"}>
+              <Banner tone="info" title="Shopify-native protection">
                 <p>{status.data.native.summary}</p>
-                <p>{status.data.edge.summary}</p>
               </Banner>
             ) : null}
             {query.isLoading ? <SkeletonBodyText lines={6} /> : query.isError ? <Banner tone="critical" title="Analytics could not be loaded"><p>{query.error instanceof Error ? query.error.message : "Request failed"}</p></Banner> : (

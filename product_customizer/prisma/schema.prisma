@@ -50,7 +50,7 @@ model ProductCustomizer {
   storeId          String
   store            Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
   shopifyProductId String
-  enabled          Boolean        @default(false)
+  enabled          Boolean        @default(true)
   name             String
   configuration    Json
   createdAt        DateTime       @default(now())

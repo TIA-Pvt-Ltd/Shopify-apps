@@ -620,3 +620,54 @@ export async function fetchCustomizerOrders(admin, first = 40) {
     return [];
   }
 }
+
+const SET_CUSTOMIZER_ENABLED_METAFIELD = `#graphql
+  mutation SetCustomizerEnabledMetafield($metafields: [MetafieldsSetInput!]!) {
+    metafieldsSet(metafields: $metafields) {
+      userErrors {
+        field
+        message
+      }
+    }
+  }
+`;
+
+export async function setCustomizerEnabledMetafield(admin, productId, enabled) {
+  if (!admin || !productId) return;
+  return setCustomizerEnabledMetafields(admin, [
+    { productId, enabled: Boolean(enabled) },
+  ]);
+}
+
+export async function setCustomizerEnabledMetafields(admin, items) {
+  if (!admin || !items?.length) return;
+  try {
+    for (let index = 0; index < items.length; index += 25) {
+      const batch = items.slice(index, index + 25).map((item) => ({
+        ownerId: toGid(item.productId),
+        namespace: "$app",
+        key: "customizer_enabled",
+        type: "boolean",
+        value: item.enabled ? "true" : "false",
+      }));
+      const response = await admin.graphql(SET_CUSTOMIZER_ENABLED_METAFIELD, {
+        variables: { metafields: batch },
+      });
+      const json = await response.json();
+      const errors = json?.data?.metafieldsSet?.userErrors || [];
+      if (errors.length) {
+        logError("metafields.customizerEnabled", JSON.stringify(errors));
+      }
+    }
+  } catch (error) {
+    logError("metafields.customizerEnabled", error);
+  }
+}
+
+export async function syncCustomizerEnabledMetafields(admin, customizerMap) {
+  const items = Object.entries(customizerMap || {}).map(([productId, row]) => ({
+    productId,
+    enabled: Boolean(row?.enabled),
+  }));
+  return setCustomizerEnabledMetafields(admin, items);
+}

@@ -77,6 +77,7 @@ export interface FirewallDeps {
   signingSecret: string;
   encryptIp?: (ip: string) => string | undefined;
   sink: { record(event: TrafficRecord): void };
+  rememberClient?: (shopId: string, ip: string) => void;
   onAutoBlock?: (shop: ShopRuntime, ip: string) => Promise<void>;
 }
 
@@ -196,10 +197,12 @@ export async function assess(deps: FirewallDeps, input: DecideInput, shop: ShopR
       });
     }
     if (record) {
+      deps.rememberClient?.(shop.id, input.ip);
       logger.info({
         shopId: shop.id,
         action: evaluation.action,
         reason: evaluation.reason,
+        ip: input.ip,
         country: country?.code ?? geo.countryCode,
         asn: geo.asn,
         vpn: intel.vpn,
