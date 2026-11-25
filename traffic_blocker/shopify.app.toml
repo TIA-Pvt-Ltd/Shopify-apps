@@ -4,7 +4,7 @@
 
 name = "Traffic Blocker"
 handle = "traffic-blocker"
-client_id = ""
+client_id = "bf2b0a9617ab53f9a3977aca196d1bc1"
 application_url = "https://localhost:3000"
 embedded = true
 

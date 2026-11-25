@@ -43,17 +43,16 @@ const snippet = `<!-- traffic-blocker:native -->
 (function () {
   if (window.Shopify && window.Shopify.designMode) return;
   var root = document.documentElement;
-  root.classList.add("tb-hold");
-  try {
-    var prior = sessionStorage.getItem("tb_decision");
-    if (prior === "block" || prior === "rate_limit") root.classList.add("tb-blocked");
-  } catch (error) { /* storage can be blocked */ }
+  var prior = "";
+  try { prior = sessionStorage.getItem("tb_decision") || ""; } catch (error) { prior = ""; }
+  if (prior === "block" || prior === "rate_limit") root.classList.add("tb-blocked", "tb-hold");
+  else if (prior !== "allow" && prior !== "challenge") root.classList.add("tb-hold");
   setTimeout(function () {
-    if (!root.classList.contains("tb-decided")) {
+    if (!root.classList.contains("tb-decided") && !root.classList.contains("tb-blocked")) {
       root.classList.remove("tb-hold");
       if (window.__tbAnalytics) window.__tbAnalytics.release();
     }
-  }, 12000);
+  }, 2500);
 })();
 </script>
 <style>

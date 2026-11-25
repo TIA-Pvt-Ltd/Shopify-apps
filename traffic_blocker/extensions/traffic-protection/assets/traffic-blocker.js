@@ -1,12 +1,15 @@
 (function () {
   if (window.Shopify && window.Shopify.designMode) return;
-  // Hide the store immediately while decide runs (in case the theme hold snippet is missing).
+  var priorDecision = "";
+  try { priorDecision = sessionStorage.getItem("tb_decision") || ""; } catch (error) { priorDecision = ""; }
+  // Reloads that already passed keep the store visible while we re-check.
+  // First visits / known blocks still hold so product HTML does not flash.
+  var optimisticAllow = priorDecision === "allow" || priorDecision === "challenge";
   try {
-    document.documentElement.classList.add("tb-hold");
-    var prior = sessionStorage.getItem("tb_decision");
-    if (prior === "block" || prior === "rate_limit") document.documentElement.classList.add("tb-blocked");
+    if (!optimisticAllow) document.documentElement.classList.add("tb-hold");
+    if (priorDecision === "block" || priorDecision === "rate_limit") document.documentElement.classList.add("tb-blocked");
   } catch (error) {
-    document.documentElement.classList.add("tb-hold");
+    if (!optimisticAllow) document.documentElement.classList.add("tb-hold");
   }
   if (!document.getElementById("tb-hold-style")) {
     var holdStyle = document.createElement("style");
@@ -14,6 +17,13 @@
     holdStyle.textContent = "html.tb-hold,html.tb-blocked{background:#0f172a!important}html.tb-hold body,html.tb-blocked body{display:none!important}";
     (document.head || document.documentElement).appendChild(holdStyle);
   }
+  setTimeout(function () {
+    var root = document.documentElement;
+    if (!root.classList.contains("tb-decided") && !root.classList.contains("tb-blocked")) {
+      root.classList.remove("tb-hold");
+      if (window.__tbAnalytics) window.__tbAnalytics.release();
+    }
+  }, 2500);
   installAnalyticsGate();
 
   function installAnalyticsGate() {
@@ -184,9 +194,10 @@
 
   function ask(watch) {
     var body = requestBody(watch);
+    var timeout = watch ? 2000 : 2200;
     var attempt = sameOrigin
-      ? post(sameOrigin, 2500, body).catch(function () { return post(tunnel, 8000, body); })
-      : post(tunnel, 8000, body);
+      ? post(sameOrigin, Math.min(timeout, 1500), body).catch(function () { return post(tunnel, timeout, body); })
+      : post(tunnel, timeout, body);
     return attempt.then(handle).catch(function () {
       // Native mode cannot fail closed when the app is unreachable.
       // A page that is already denied stays denied if a later check cannot connect.
@@ -284,5 +295,6 @@
   }
 
   ask(false);
-  setInterval(function () { ask(true); }, 3000);
+  // Soft re-check; keep interval well above the decide timeout so requests never pile up.
+  setInterval(function () { ask(true); }, 15000);
 })();

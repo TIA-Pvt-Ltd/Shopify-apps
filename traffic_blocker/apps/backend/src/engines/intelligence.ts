@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { ipInAnyCidr, parseNetwork } from "../lib/ip.js";
+import { ipInAnyCidr, normalizeIp, parseNetwork } from "../lib/ip.js";
 
 export interface NetworkProfile {
   asn: number;
@@ -116,18 +116,50 @@ export interface IntelligenceProvider {
   stats?: IntelligenceStats;
 }
 
+class CidrSet {
+  private readonly hosts = new Set<string>();
+  private readonly ranges: string[] = [];
+
+  constructor(cidrs: readonly string[] = []) {
+    for (const cidr of cidrs) {
+      if (cidr.endsWith("/32") || cidr.endsWith("/128")) {
+        this.hosts.add(cidr.slice(0, cidr.lastIndexOf("/")));
+      } else {
+        this.ranges.push(cidr);
+      }
+    }
+  }
+
+  get size(): number {
+    return this.hosts.size + this.ranges.length;
+  }
+
+  has(ip: string): boolean {
+    const normalized = normalizeIp(ip);
+    if (!normalized) return false;
+    if (this.hosts.has(normalized)) return true;
+    return this.ranges.length > 0 && ipInAnyCidr(normalized, this.ranges);
+  }
+}
+
 export class ListIntelligence implements IntelligenceProvider {
   readonly stats: IntelligenceStats;
+  private readonly vpn: CidrSet;
+  private readonly proxy: CidrSet;
+  private readonly tor: CidrSet;
 
   constructor(
-    private readonly vpnCidrs: string[] = [],
-    private readonly proxyCidrs: string[] = [],
-    private readonly torCidrs: string[] = [],
+    vpnCidrs: string[] = [],
+    proxyCidrs: string[] = [],
+    torCidrs: string[] = [],
   ) {
+    this.vpn = new CidrSet(vpnCidrs);
+    this.proxy = new CidrSet(proxyCidrs);
+    this.tor = new CidrSet(torCidrs);
     this.stats = {
-      vpnCidrs: vpnCidrs.length,
-      proxyCidrs: proxyCidrs.length,
-      torCidrs: torCidrs.length,
+      vpnCidrs: this.vpn.size,
+      proxyCidrs: this.proxy.size,
+      torCidrs: this.tor.size,
       vpnAsns: VPN_ASNS.size,
       hostingAsns: HOSTING_ASNS.size,
     };
@@ -136,9 +168,9 @@ export class ListIntelligence implements IntelligenceProvider {
   inspect(ip: string, asn: number | null): IntelResult {
     const known = lookupAsn(asn);
     return {
-      vpn: ipInAnyCidr(ip, this.vpnCidrs) || VPN_ASNS.has(asn ?? -1),
-      proxy: ipInAnyCidr(ip, this.proxyCidrs),
-      tor: ipInAnyCidr(ip, this.torCidrs),
+      vpn: this.vpn.has(ip) || VPN_ASNS.has(asn ?? -1),
+      proxy: this.proxy.has(ip),
+      tor: this.tor.has(ip),
       datacenter: known?.hosting === true || HOSTING_ASNS.has(asn ?? -1),
     };
   }
