@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { Frame, Toast } from "@shopify/polaris";
+import { useEffect, useRef, useState } from "react";
+import { Frame, Loading, Toast } from "@shopify/polaris";
+import { useIsFetching } from "@tanstack/react-query";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { OverviewPage } from "./pages/Overview";
 import { CountriesPage } from "./pages/Countries";
@@ -16,11 +17,33 @@ import { SettingsPage } from "./pages/Settings";
 export function App() {
   const location = useLocation();
   const [toast, setToast] = useState<string | null>(null);
+  const [navPath, setNavPath] = useState(location.pathname);
+  const [routeLoading, setRouteLoading] = useState(false);
+  const fetchStarted = useRef(false);
+  const fetching = useIsFetching();
   const search = location.search;
+
+  if (location.pathname !== navPath) {
+    setNavPath(location.pathname);
+    setRouteLoading(true);
+    fetchStarted.current = false;
+  }
+
+  useEffect(() => {
+    if (!routeLoading) return;
+    if (fetching > 0) {
+      fetchStarted.current = true;
+      return;
+    }
+    const delay = fetchStarted.current ? 160 : 220;
+    const timer = window.setTimeout(() => setRouteLoading(false), delay);
+    return () => window.clearTimeout(timer);
+  }, [routeLoading, fetching]);
 
   return (
     <Frame>
-      <div className="tb-canvas">
+      {routeLoading ? <Loading /> : null}
+      <div className={`tb-canvas${routeLoading ? " is-route-loading" : ""}`}>
         <Routes>
           <Route path="/" element={<OverviewPage />} />
           <Route path="/countries" element={<CountriesPage notify={setToast} />} />

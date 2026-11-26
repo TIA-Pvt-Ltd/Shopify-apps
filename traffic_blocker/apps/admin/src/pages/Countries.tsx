@@ -1,6 +1,22 @@
-import { useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Banner, BlockStack, Button, Card, Checkbox, EmptyState, InlineStack, Page, Select, TextField } from "@shopify/polaris";
+import { useCallback, useMemo, useState } from "react";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  Badge,
+  Banner,
+  BlockStack,
+  Box,
+  Button,
+  Card,
+  EmptyState,
+  IndexTable,
+  InlineStack,
+  Page,
+  Select,
+  SkeletonBodyText,
+  Text,
+  TextField,
+  useIndexResourceState,
+} from "@shopify/polaris";
 import { CONTINENTS, type ContinentCode } from "@traffic-blocker/country-data";
 import { api, withQuery } from "../api";
 
@@ -14,43 +30,38 @@ interface CountryRow {
   ruleId: string | null;
   mode: string | null;
   blockedRequests: number;
-}
-
-function StatusToggle({ name, blocked, busy, onToggle }: { name: string; blocked: boolean; busy: boolean; onToggle: () => void }) {
-  return (
-    <button
-      type="button"
-      className={blocked ? "tb-switch tb-switch-on" : "tb-switch"}
-      aria-pressed={blocked}
-      aria-label={`${blocked ? "Allow" : "Block"} ${name}`}
-      disabled={busy}
-      onClick={onToggle}
-    >
-      <span className="tb-switch-track" aria-hidden="true"><span className="tb-switch-knob" /></span>
-      {blocked ? "Blocked" : "Allowed"}
-    </button>
-  );
+  [key: string]: unknown;
 }
 
 export function CountriesPage({ notify }: { notify: (message: string) => void }) {
   const client = useQueryClient();
   const [q, setQ] = useState("");
   const [continent, setContinent] = useState("");
-  const [selected, setSelected] = useState<string[]>([]);
   const [page, setPage] = useState(1);
+
   const query = useQuery({
     queryKey: ["countries", q, continent, page],
     queryFn: () => api<CountryRow[]>(withQuery("/api/v1/countries", { q, continent, page, pageSize: 50 })),
+    placeholderData: keepPreviousData,
   });
+
+  const rows = query.data ?? [];
+  const { selectedResources, allResourcesSelected, handleSelectionChange, clearSelection } = useIndexResourceState(rows, {
+    resourceIDResolver: (row) => row.code,
+  });
+
   const mutation = useMutation({
     mutationFn: (body: unknown) => api("/api/v1/countries/bulk", { method: "POST", body: JSON.stringify(body) }),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       void client.invalidateQueries({ queryKey: ["countries"] });
-      setSelected([]);
-      notify("Country rules updated");
+      clearSelection();
+      const action = (variables as { action?: string }).action;
+      notify(action === "block" ? "Countries blocked" : "Countries allowed");
+      mutation.reset();
     },
     onError: (error: Error) => notify(error.message),
   });
+
   const toggle = useMutation({
     mutationFn: (row: CountryRow) => {
       const blocking = row.blocked && row.enabled;
@@ -64,9 +75,9 @@ export function CountriesPage({ notify }: { notify: (message: string) => void })
       await client.cancelQueries({ queryKey: key });
       const previous = client.getQueryData<CountryRow[]>(key);
       const blocking = row.blocked && row.enabled;
-      client.setQueryData<CountryRow[]>(key, (current) => current?.map((item) => (
-        item.code === row.code ? { ...item, blocked: !blocking, enabled: !blocking } : item
-      )));
+      client.setQueryData<CountryRow[]>(key, (current) =>
+        current?.map((item) => (item.code === row.code ? { ...item, blocked: !blocking, enabled: !blocking } : item)),
+      );
       return { previous, key };
     },
     onError: (error: Error, _row, context) => {
@@ -77,58 +88,220 @@ export function CountriesPage({ notify }: { notify: (message: string) => void })
       void client.invalidateQueries({ queryKey: ["countries"] });
     },
   });
-  const rows = query.data ?? [];
-  const allChecked = rows.length > 0 && rows.every((row) => selected.includes(row.code));
-  const options = useMemo(() => [{ label: "All continents", value: "" }, ...Object.entries(CONTINENTS).map(([value, label]) => ({ value, label }))], []);
+
+  const continentOptions = useMemo(
+    () => [{ label: "All continents", value: "" }, ...Object.entries(CONTINENTS).map(([value, label]) => ({ value, label }))],
+    [],
+  );
+
+  const blockSelected = useCallback(() => {
+    if (!selectedResources.length) return;
+    mutation.mutate({ action: "block", countryCodes: selectedResources });
+  }, [mutation, selectedResources]);
+
+  const allowSelected = useCallback(() => {
+    if (!selectedResources.length) return;
+    mutation.mutate({ action: "allow", countryCodes: selectedResources });
+  }, [mutation, selectedResources]);
+
+  const blockContinent = useCallback(() => {
+    if (!continent) return;
+    mutation.mutate({ action: "block", continent: continent as ContinentCode });
+  }, [continent, mutation]);
+
+  const promotedBulkActions = [
+    {
+      content: "Block selected",
+      onAction: blockSelected,
+      disabled: mutation.isPending,
+    },
+    {
+      content: "Allow selected",
+      onAction: allowSelected,
+      disabled: mutation.isPending,
+    },
+  ];
+
+  const resourceName = { singular: "country", plural: "countries" };
+  const continentLabel = continentOptions.find((option) => option.value === continent)?.label;
+
   return (
-    <Page title="Country blocking" subtitle="Rules use ISO codes. Live detection uses MaxMind on the server-observed IP.">
+    <Page
+      title="Country blocking"
+      subtitle="Rules use ISO codes. Live detection uses MaxMind on the server-observed IP."
+      fullWidth
+      secondaryActions={
+        continent
+          ? [
+              {
+                content: "Block all in continent",
+                onAction: blockContinent,
+                disabled: mutation.isPending,
+                loading: mutation.isPending,
+              },
+            ]
+          : undefined
+      }
+    >
       <BlockStack gap="400">
-        <InlineStack gap="200">
-          <Button disabled={!selected.length} loading={mutation.isPending} onClick={() => mutation.mutate({ action: "block", countryCodes: selected })}>Block selected</Button>
-          <Button disabled={!selected.length} onClick={() => mutation.mutate({ action: "allow", countryCodes: selected })}>Allow selected</Button>
-          <Button disabled={!continent} onClick={() => mutation.mutate({ action: "block", continent: continent as ContinentCode })}>Block all in continent</Button>
-          <Button onClick={() => setSelected([])}>Clear selection</Button>
-        </InlineStack>
-        <InlineStack gap="300">
-          <div style={{ minWidth: 240 }}><TextField label="Search" value={q} onChange={(value) => { setQ(value); setPage(1); }} autoComplete="off" /></div>
-          <div style={{ minWidth: 220 }}><Select label="Continent" options={options} value={continent} onChange={(value) => { setContinent(value); setPage(1); }} /></div>
-        </InlineStack>
         {query.isError ? <Banner tone="critical" title={(query.error as Error).message} /> : null}
-        <Card>
-          {query.isLoading ? <p>Loading countries…</p> : rows.length === 0 ? <EmptyState heading="No countries match" image="">Try a different search.</EmptyState> : (
-            <table className="tb-table">
-              <thead>
-                <tr>
-                  <th><Checkbox label="Select page" labelHidden checked={allChecked} onChange={(checked) => setSelected(checked ? rows.map((row) => row.code) : [])} /></th>
-                  <th>Flag</th><th>Country</th><th>Code</th><th>Status</th><th>Blocked requests</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={row.code}>
-                    <td><Checkbox label={row.name} labelHidden checked={selected.includes(row.code)} onChange={(checked) => setSelected(checked ? [...selected, row.code] : selected.filter((code) => code !== row.code))} /></td>
-                    <td><img className="tb-flag" alt="" src={`https://flagcdn.com/24x18/${row.code.toLowerCase()}.png`} /></td>
-                    <td>{row.name}</td>
-                    <td>{row.code}</td>
-                    <td>
-                      <StatusToggle
-                        name={row.name}
-                        blocked={row.blocked && row.enabled}
-                        busy={toggle.isPending && toggle.variables?.code === row.code}
-                        onToggle={() => toggle.mutate(row)}
-                      />
-                    </td>
-                    <td>{row.blockedRequests}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+
+        <Card padding="0">
+          <Box padding="400" borderBlockEndWidth="025" borderColor="border-secondary">
+            <InlineStack gap="300" wrap blockAlign="end">
+              <Box minWidth="220px" maxWidth="320px" width="100%">
+                <TextField
+                  label="Search countries"
+                  value={q}
+                  onChange={(value) => {
+                    setQ(value);
+                    setPage(1);
+                    clearSelection();
+                  }}
+                  autoComplete="off"
+                  placeholder="Name or ISO code"
+                  clearButton
+                  onClearButtonClick={() => {
+                    setQ("");
+                    setPage(1);
+                    clearSelection();
+                  }}
+                  loading={query.isFetching && !query.isLoading}
+                />
+              </Box>
+              <Box minWidth="200px" maxWidth="260px" width="100%">
+                <Select
+                  label="Continent"
+                  options={continentOptions}
+                  value={continent}
+                  onChange={(value) => {
+                    setContinent(value);
+                    setPage(1);
+                    clearSelection();
+                  }}
+                />
+              </Box>
+            </InlineStack>
+          </Box>
+
+          {(q || continent) && !query.isLoading ? (
+            <Box paddingInline="400" paddingBlock="200" background="bg-surface-secondary" borderBlockEndWidth="025" borderColor="border-secondary">
+              <InlineStack gap="200" blockAlign="center" wrap>
+                <Text as="span" variant="bodySm" tone="subdued">
+                  Filters
+                </Text>
+                {q ? <Badge>{`Search: ${q}`}</Badge> : null}
+                {continent ? <Badge tone="info">{continentLabel}</Badge> : null}
+                <Button
+                  variant="plain"
+                  onClick={() => {
+                    setQ("");
+                    setContinent("");
+                    setPage(1);
+                    clearSelection();
+                  }}
+                >
+                  Clear
+                </Button>
+              </InlineStack>
+            </Box>
+          ) : null}
+
+          {query.isLoading ? (
+            <Box padding="400">
+              <BlockStack gap="400">
+                <SkeletonBodyText lines={2} />
+                <SkeletonBodyText lines={10} />
+              </BlockStack>
+            </Box>
+          ) : rows.length === 0 ? (
+            <Box padding="500">
+              <EmptyState heading="No countries match" image="">
+                <p>Try a different search or continent filter.</p>
+              </EmptyState>
+            </Box>
+          ) : (
+            <div className={query.isFetching ? "tb-chart-fade is-fetching" : undefined}>
+              <IndexTable
+                resourceName={resourceName}
+                itemCount={rows.length}
+                selectedItemsCount={allResourcesSelected ? "All" : selectedResources.length}
+                onSelectionChange={handleSelectionChange}
+                headings={[
+                  { title: "Country" },
+                  { title: "Code" },
+                  { title: "Continent" },
+                  { title: "Status" },
+                  { title: "Blocked requests", alignment: "end" },
+                  { title: "Action", alignment: "end" },
+                ]}
+                promotedBulkActions={promotedBulkActions}
+                hasZebraStriping
+                pagination={{
+                  hasPrevious: page > 1,
+                  hasNext: rows.length >= 50,
+                  onPrevious: () => {
+                    setPage((current) => Math.max(1, current - 1));
+                    clearSelection();
+                  },
+                  onNext: () => {
+                    setPage((current) => current + 1);
+                    clearSelection();
+                  },
+                  label: `Page ${page}`,
+                }}
+              >
+                {rows.map((row, index) => {
+                  const blocked = Boolean(row.blocked && row.enabled);
+                  const toggling = toggle.isPending && toggle.variables?.code === row.code;
+                  return (
+                    <IndexTable.Row id={row.code} key={row.code} selected={selectedResources.includes(row.code)} position={index}>
+                      <IndexTable.Cell>
+                        <InlineStack gap="300" blockAlign="center" wrap={false}>
+                          <img className="tb-flag" alt="" src={`https://flagcdn.com/24x18/${row.code.toLowerCase()}.png`} />
+                          <Text as="span" variant="bodyMd" fontWeight="medium">
+                            {row.name}
+                          </Text>
+                        </InlineStack>
+                      </IndexTable.Cell>
+                      <IndexTable.Cell>
+                        <Text as="span" variant="bodyMd">
+                          <span className="tb-mono">{row.code}</span>
+                        </Text>
+                      </IndexTable.Cell>
+                      <IndexTable.Cell>
+                        <Text as="span" variant="bodySm" tone="subdued">
+                          {row.continentName}
+                        </Text>
+                      </IndexTable.Cell>
+                      <IndexTable.Cell>
+                        <Badge tone={blocked ? "critical" : "success"}>{blocked ? "Blocked" : "Allowed"}</Badge>
+                      </IndexTable.Cell>
+                      <IndexTable.Cell>
+                        <Text as="span" variant="bodyMd" alignment="end" numeric>
+                          {row.blockedRequests.toLocaleString()}
+                        </Text>
+                      </IndexTable.Cell>
+                      <IndexTable.Cell>
+                        <InlineStack align="end">
+                          <Button
+                            size="slim"
+                            variant={blocked ? "secondary" : "primary"}
+                            tone={blocked ? undefined : "critical"}
+                            loading={toggling}
+                            onClick={() => toggle.mutate(row)}
+                          >
+                            {blocked ? "Allow" : "Block"}
+                          </Button>
+                        </InlineStack>
+                      </IndexTable.Cell>
+                    </IndexTable.Row>
+                  );
+                })}
+              </IndexTable>
+            </div>
           )}
         </Card>
-        <InlineStack gap="200">
-          <Button disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</Button>
-          <Button onClick={() => setPage(page + 1)}>Next</Button>
-        </InlineStack>
       </BlockStack>
     </Page>
   );

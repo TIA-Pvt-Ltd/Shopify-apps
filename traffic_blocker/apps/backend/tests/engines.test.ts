@@ -227,11 +227,13 @@ describe("shopify verification", () => {
     const now = 1_700_000_000_000;
     const barelyExpired = createSessionToken({ apiKey: "key", secret, shop: "demo.myshopify.com", now: now - 65_000, ttlSeconds: 60 });
     expect(verifySessionToken(barelyExpired, "key", secret, now).shop).toBe("demo.myshopify.com");
-    const expired = createSessionToken({ apiKey: "key", secret, shop: "demo.myshopify.com", now: now - 120_000, ttlSeconds: 60 });
+    const skewExpired = createSessionToken({ apiKey: "key", secret, shop: "demo.myshopify.com", now: now - 140_000, ttlSeconds: 60 });
+    expect(verifySessionToken(skewExpired, "key", secret, now).shop).toBe("demo.myshopify.com");
+    const expired = createSessionToken({ apiKey: "key", secret, shop: "demo.myshopify.com", now: now - 200_000, ttlSeconds: 60 });
     expect(() => verifySessionToken(expired, "key", secret, now)).toThrow(/Expired session token/);
-    const slightlyEarly = createSessionToken({ apiKey: "key", secret, shop: "demo.myshopify.com", now: now + 5_000, ttlSeconds: 60 });
+    const slightlyEarly = createSessionToken({ apiKey: "key", secret, shop: "demo.myshopify.com", now: now + 30_000, ttlSeconds: 60 });
     expect(verifySessionToken(slightlyEarly, "key", secret, now).shop).toBe("demo.myshopify.com");
-    const notYetActive = createSessionToken({ apiKey: "key", secret, shop: "demo.myshopify.com", now: now + 30_000, ttlSeconds: 60 });
+    const notYetActive = createSessionToken({ apiKey: "key", secret, shop: "demo.myshopify.com", now: now + 120_000, ttlSeconds: 60 });
     expect(() => verifySessionToken(notYetActive, "key", secret, now)).toThrow(/not active/);
   });
 });

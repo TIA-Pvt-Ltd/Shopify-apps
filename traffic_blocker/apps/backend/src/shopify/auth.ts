@@ -74,8 +74,12 @@ export function createSessionToken(input: {
   return `${header}.${body}.${signature}`;
 }
 
-/** Same allowance as @shopify/shopify-api. App Bridge often delivers a token a few seconds from expiry. */
-const SESSION_CLOCK_TOLERANCE_MS = 10_000;
+/**
+ * Allow modest clock drift between Shopify's token issuer and the API host.
+ * App Bridge also reuses near-expiry cached JWTs; Windows hosts commonly drift
+ * 15–30s, which previously surfaced every request as "Invalid session token".
+ */
+const SESSION_CLOCK_TOLERANCE_MS = 90_000;
 
 export function verifySessionToken(token: string, apiKey: string, secret: string, now = Date.now()): SessionClaims {
   const [header, body, signature] = token.split(".");

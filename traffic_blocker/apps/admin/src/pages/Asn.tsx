@@ -1,6 +1,25 @@
-import { useState, type ReactNode } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Banner, Button, Card, Page, Text, TextField } from "@shopify/polaris";
+import { useMemo, useState } from "react";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  Badge,
+  Banner,
+  BlockStack,
+  Box,
+  Button,
+  Card,
+  Divider,
+  EmptyState,
+  FormLayout,
+  IndexTable,
+  InlineStack,
+  Page,
+  SkeletonBodyText,
+  SkeletonDisplayText,
+  Tabs,
+  Text,
+  TextField,
+  Tooltip,
+} from "@shopify/polaris";
 import { api, withQuery } from "../api";
 
 interface AsnHit {
@@ -22,22 +41,35 @@ interface AsnPayload {
   observed: Array<{ asn: number; organization: string; requests: number }>;
 }
 
+type ListTab = "blocked" | "seen";
+
 export function AsnPage({ notify }: { notify: (message: string) => void }) {
   const client = useQueryClient();
   const [q, setQ] = useState("");
   const [asn, setAsn] = useState("");
+  const [selectedTab, setSelectedTab] = useState(0);
   const needle = q.trim();
+  const listTab: ListTab = selectedTab === 1 ? "seen" : "blocked";
+
   const search = useQuery({
     queryKey: ["asn-search", needle],
     queryFn: () => api<AsnHit[]>(withQuery("/api/v1/asns/search", { q: needle })),
     enabled: needle.length >= 2,
+    placeholderData: keepPreviousData,
   });
-  const rules = useQuery({ queryKey: ["asns"], queryFn: () => api<AsnPayload>("/api/v1/asns") });
+
+  const rules = useQuery({
+    queryKey: ["asns"],
+    queryFn: () => api<AsnPayload>("/api/v1/asns"),
+    placeholderData: keepPreviousData,
+  });
+
   const save = useMutation({
-    mutationFn: (entry: { asn: number; organization?: string }) => api("/api/v1/asns", {
-      method: "POST",
-      body: JSON.stringify({ asn: entry.asn, organization: entry.organization, enabled: true, mode: "permanent" }),
-    }),
+    mutationFn: (entry: { asn: number; organization?: string }) =>
+      api("/api/v1/asns", {
+        method: "POST",
+        body: JSON.stringify({ asn: entry.asn, organization: entry.organization, enabled: true, mode: "permanent" }),
+      }),
     onSuccess: () => {
       setAsn("");
       void client.invalidateQueries({ queryKey: ["asns"] });
@@ -46,6 +78,7 @@ export function AsnPage({ notify }: { notify: (message: string) => void }) {
     },
     onError: (error: Error) => notify(error.message),
   });
+
   const remove = useMutation({
     mutationFn: (id: string) => api(`/api/v1/asns/${id}`, { method: "DELETE" }),
     onSuccess: () => {
@@ -55,142 +88,326 @@ export function AsnPage({ notify }: { notify: (message: string) => void }) {
     },
     onError: (error: Error) => notify(error.message),
   });
-  const saved = new Map((rules.data?.rules ?? []).map((rule) => [rule.asn, rule]));
+
+  const saved = useMemo(() => new Map((rules.data?.rules ?? []).map((rule) => [rule.asn, rule])), [rules.data?.rules]);
   const manual = Number(asn.replace(/^as/i, ""));
   const manualReady = Number.isInteger(manual) && manual > 0 && !save.isPending;
   const hits = needle.length >= 2 ? search.data ?? [] : [];
   const blocked = rules.data?.rules ?? [];
   const observed = rules.data?.observed ?? [];
   const denied = observed.reduce((sum, row) => sum + row.requests, 0);
+  const loading = rules.isLoading;
+  const searching = needle.length >= 2;
+
+  const tabs = [
+    { id: "blocked", content: "Blocked", badge: String(blocked.length) },
+    { id: "seen", content: "Seen in traffic", badge: String(observed.length) },
+  ];
+
   return (
-    <Page title="ASN blocking" subtitle="Deny every visitor whose IP belongs to a network. The server looks up the ASN. A name is not required for the rule to match.">
-      <div className="tb-asn">
-        {rules.isError ? <Banner tone="critical" title={rules.error instanceof Error ? rules.error.message : "Networks could not be loaded"} /> : null}
-        <div className="tb-asn-metrics">
-          <div className="tb-metric"><span>Blocked networks</span><strong>{blocked.length}</strong></div>
-          <div className="tb-metric"><span>Networks seen</span><strong>{observed.length}</strong></div>
-          <div className="tb-metric"><span>Denied visits</span><strong>{denied.toLocaleString()}</strong></div>
-        </div>
+    <Page
+      title="ASN blocking"
+      subtitle="Deny visitors whose IP belongs to a network. The server looks up the ASN automatically."
+      fullWidth
+    >
+      <BlockStack gap="400">
+        {rules.isError ? (
+          <Banner tone="critical" title={rules.error instanceof Error ? rules.error.message : "Networks could not be loaded"} />
+        ) : null}
+
+        <Card padding="0">
+          {loading ? (
+            <Box padding="400">
+              <InlineStack gap="800" wrap>
+                <SkeletonDisplayText size="small" />
+                <SkeletonDisplayText size="small" />
+                <SkeletonDisplayText size="small" />
+              </InlineStack>
+            </Box>
+          ) : (
+            <div className="tb-metric-row">
+              <MetricCell label="Blocked networks" value={blocked.length} />
+              <MetricCell label="Networks seen" value={observed.length} />
+              <MetricCell label="Denied visits" value={denied} />
+            </div>
+          )}
+        </Card>
+
         <Card>
-          <div className="tb-asn-compose">
-            <div>
-              <Text as="h2" variant="headingMd">Find a network</Text>
-              <p>Search the directory by provider name or number. Two characters starts the search.</p>
-              <div className="tb-asn-field">
-                <TextField label="Search ASN or provider" labelHidden value={q} onChange={setQ} autoComplete="off" placeholder="Cloudflare or 13335" />
-              </div>
-            </div>
-            <div>
-              <Text as="h2" variant="headingMd">Block by number</Text>
-              <p>Use this when the network is not listed. AS15169 and 15169 are the same rule.</p>
-              <div className="tb-asn-add-row">
-                <TextField label="ASN number" value={asn} onChange={setAsn} autoComplete="off" placeholder="15169" />
-                <Button variant="primary" disabled={!manualReady} loading={save.isPending && save.variables?.asn === manual} onClick={() => save.mutate({ asn: manual })}>Block</Button>
-              </div>
-            </div>
-          </div>
-          {needle.length >= 2 ? (
-            <div className="tb-asn-results">
-              {search.isError ? <Banner tone="critical" title={search.error instanceof Error ? search.error.message : "Search failed"} /> : null}
-              {search.isLoading ? <p className="tb-empty">Searching the directory…</p> : null}
-              {!search.isLoading && !search.isError && hits.length === 0 ? <p className="tb-empty">No networks match that search.</p> : null}
-              {hits.map((row) => (
-                <NetworkRow
-                  key={row.asn}
-                  asn={row.asn}
-                  title={row.organization}
-                  meta={row.hosting ? "Hosting network" : "Network"}
-                  action={blockControl(saved.get(row.asn), save.isPending, save.isPending && save.variables?.asn === row.asn, () => save.mutate({ asn: row.asn, organization: row.organization }))}
+          <BlockStack gap="400">
+            <BlockStack gap="100">
+              <Text as="h2" variant="headingMd">
+                Add a network
+              </Text>
+              <Text as="p" variant="bodySm" tone="subdued">
+                Search the directory, or enter an ASN directly. AS15169 and 15169 are the same rule.
+              </Text>
+            </BlockStack>
+            <Divider />
+            <FormLayout>
+              <FormLayout.Group>
+                <TextField
+                  label="Search provider or ASN"
+                  value={q}
+                  onChange={setQ}
+                  autoComplete="off"
+                  placeholder="Cloudflare or 13335"
+                  helpText="Enter at least 2 characters to search."
+                  clearButton
+                  onClearButtonClick={() => setQ("")}
+                  loading={search.isFetching && searching}
                 />
-              ))}
-            </div>
-          ) : null}
+                <InlineStack gap="200" blockAlign="end" wrap={false}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <TextField
+                      label="ASN number"
+                      value={asn}
+                      onChange={setAsn}
+                      autoComplete="off"
+                      placeholder="15169"
+                      monospaced
+                      clearButton
+                      onClearButtonClick={() => setAsn("")}
+                    />
+                  </div>
+                  <Button
+                    variant="primary"
+                    tone="critical"
+                    disabled={!manualReady}
+                    loading={save.isPending && save.variables?.asn === manual}
+                    onClick={() => save.mutate({ asn: manual })}
+                  >
+                    Block ASN
+                  </Button>
+                </InlineStack>
+              </FormLayout.Group>
+            </FormLayout>
+          </BlockStack>
         </Card>
+
+        {searching ? (
+          <Card padding="0">
+            <Box padding="400" borderBlockEndWidth="025" borderColor="border-secondary">
+              <InlineStack align="space-between" blockAlign="center" wrap gap="200">
+                <BlockStack gap="100">
+                  <Text as="h2" variant="headingMd">
+                    Search results
+                  </Text>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Networks matching “{needle}”.
+                  </Text>
+                </BlockStack>
+                <Badge tone={search.isFetching ? undefined : "info"}>{search.isFetching ? "Updating" : `${hits.length} found`}</Badge>
+              </InlineStack>
+            </Box>
+            {search.isError ? (
+              <Box padding="400">
+                <Banner tone="critical" title={search.error instanceof Error ? search.error.message : "Search failed"} />
+              </Box>
+            ) : search.isLoading ? (
+              <Box padding="400">
+                <SkeletonBodyText lines={6} />
+              </Box>
+            ) : hits.length === 0 ? (
+              <Box padding="500">
+                <EmptyState heading="No networks match" image="">
+                  <p>Try another provider name, or block by ASN number above.</p>
+                </EmptyState>
+              </Box>
+            ) : (
+              <div className={search.isFetching ? "tb-chart-fade is-fetching" : undefined}>
+                <IndexTable
+                  resourceName={{ singular: "network", plural: "networks" }}
+                  itemCount={hits.length}
+                  selectable={false}
+                  headings={[{ title: "Network" }, { title: "Type" }, { title: "Action", alignment: "end" }]}
+                  hasZebraStriping
+                >
+                  {hits.map((row, index) => (
+                    <IndexTable.Row id={`search-${row.asn}`} key={row.asn} position={index}>
+                      <IndexTable.Cell>
+                        <NetworkIdentity asn={row.asn} name={row.organization} />
+                      </IndexTable.Cell>
+                      <IndexTable.Cell>
+                        <Badge>{row.hosting ? "Hosting" : "Network"}</Badge>
+                      </IndexTable.Cell>
+                      <IndexTable.Cell>
+                        <InlineStack align="end">
+                          <BlockAction
+                            existing={saved.get(row.asn)}
+                            pending={save.isPending}
+                            loading={save.isPending && save.variables?.asn === row.asn}
+                            onBlock={() => save.mutate({ asn: row.asn, organization: row.organization })}
+                          />
+                        </InlineStack>
+                      </IndexTable.Cell>
+                    </IndexTable.Row>
+                  ))}
+                </IndexTable>
+              </div>
+            )}
+          </Card>
+        ) : null}
+
         <Card padding="0">
-          <div className="tb-asn-head">
-            <div>
-              <Text as="h2" variant="headingMd">Blocked networks</Text>
-              <p>An enabled rule denies the visit when the lookup returns that number.</p>
-            </div>
-          </div>
-          {rules.isLoading ? <p className="tb-empty">Loading blocked networks…</p> : blocked.length === 0 ? (
-            <div className="tb-asn-empty">
-              <strong>No networks are blocked</strong>
-              <p>Search for a provider or enter an ASN. The next matching visit is denied.</p>
-            </div>
+          <Box paddingInline="300" paddingBlockStart="200" borderBlockEndWidth="025" borderColor="border-secondary">
+            <Tabs tabs={tabs} selected={selectedTab} onSelect={setSelectedTab} />
+          </Box>
+
+          {loading ? (
+            <Box padding="400">
+              <SkeletonBodyText lines={8} />
+            </Box>
+          ) : listTab === "blocked" ? (
+            blocked.length === 0 ? (
+              <Box padding="500">
+                <EmptyState heading="No networks are blocked" image="">
+                  <p>Search for a provider or enter an ASN. The next matching visit is denied.</p>
+                </EmptyState>
+              </Box>
+            ) : (
+              <div className={rules.isFetching ? "tb-chart-fade is-fetching" : undefined}>
+                <IndexTable
+                  resourceName={{ singular: "blocked network", plural: "blocked networks" }}
+                  itemCount={blocked.length}
+                  selectable={false}
+                  headings={[
+                    { title: "Network" },
+                    { title: "Status" },
+                    { title: "Blocked visits", alignment: "end" },
+                    { title: "", alignment: "end" },
+                  ]}
+                  hasZebraStriping
+                >
+                  {blocked.map((rule, index) => (
+                    <IndexTable.Row id={rule._id} key={rule._id} position={index}>
+                      <IndexTable.Cell>
+                        <NetworkIdentity asn={rule.asn} name={rule.organization || "Unknown organization"} />
+                      </IndexTable.Cell>
+                      <IndexTable.Cell>
+                        <Badge tone={rule.enabled ? "critical" : undefined}>{rule.enabled ? "Blocking" : "Disabled"}</Badge>
+                      </IndexTable.Cell>
+                      <IndexTable.Cell>
+                        <Text as="span" variant="bodyMd" alignment="end" numeric>
+                          {rule.blockedCount.toLocaleString()}
+                        </Text>
+                      </IndexTable.Cell>
+                      <IndexTable.Cell>
+                        <InlineStack align="end">
+                          <Button
+                            variant="plain"
+                            tone="critical"
+                            loading={remove.isPending && remove.variables === rule._id}
+                            disabled={remove.isPending}
+                            onClick={() => remove.mutate(rule._id)}
+                          >
+                            Remove
+                          </Button>
+                        </InlineStack>
+                      </IndexTable.Cell>
+                    </IndexTable.Row>
+                  ))}
+                </IndexTable>
+              </div>
+            )
+          ) : observed.length === 0 ? (
+            <Box padding="500">
+              <EmptyState heading="No networks recorded yet" image="">
+                <p>Denied visits appear here with the ASN the server observed.</p>
+              </EmptyState>
+            </Box>
           ) : (
-            <div className="tb-asn-list">
-              {blocked.map((rule) => (
-                <NetworkRow
-                  key={rule._id}
-                  asn={rule.asn}
-                  title={rule.organization || "Unknown organization"}
-                  meta={rule.enabled ? "Blocking" : "Disabled"}
-                  count={rule.blockedCount}
-                  countLabel="Blocked"
-                  action={<Button variant="plain" tone="critical" loading={remove.isPending && remove.variables === rule._id} disabled={remove.isPending} onClick={() => remove.mutate(rule._id)}>Remove</Button>}
-                />
-              ))}
+            <div className={rules.isFetching ? "tb-chart-fade is-fetching" : undefined}>
+              <IndexTable
+                resourceName={{ singular: "observed network", plural: "observed networks" }}
+                itemCount={observed.length}
+                selectable={false}
+                headings={[
+                  { title: "Network" },
+                  { title: "Denied visits", alignment: "end" },
+                  { title: "Action", alignment: "end" },
+                ]}
+                hasZebraStriping
+              >
+                {observed.map((row, index) => (
+                  <IndexTable.Row id={`seen-${row.asn}`} key={row.asn} position={index}>
+                    <IndexTable.Cell>
+                      <BlockStack gap="050">
+                        <NetworkIdentity asn={row.asn} name={row.organization} />
+                        <Text as="span" variant="bodySm" tone="subdued">
+                          Recorded on a denied request
+                        </Text>
+                      </BlockStack>
+                    </IndexTable.Cell>
+                    <IndexTable.Cell>
+                      <Text as="span" variant="bodyMd" alignment="end" numeric>
+                        {row.requests.toLocaleString()}
+                      </Text>
+                    </IndexTable.Cell>
+                    <IndexTable.Cell>
+                      <InlineStack align="end">
+                        <BlockAction
+                          existing={saved.get(row.asn)}
+                          pending={save.isPending}
+                          loading={save.isPending && save.variables?.asn === row.asn}
+                          onBlock={() => save.mutate({ asn: row.asn, organization: row.organization })}
+                        />
+                      </InlineStack>
+                    </IndexTable.Cell>
+                  </IndexTable.Row>
+                ))}
+              </IndexTable>
             </div>
           )}
         </Card>
-        <Card padding="0">
-          <div className="tb-asn-head">
-            <div>
-              <Text as="h2" variant="headingMd">Seen in traffic</Text>
-              <p>Networks already recorded on denied requests. Blocking one uses the same rule as search.</p>
-            </div>
-          </div>
-          {rules.isLoading ? <p className="tb-empty">Loading observed networks…</p> : observed.length === 0 ? (
-            <div className="tb-asn-empty">
-              <strong>No networks recorded yet</strong>
-              <p>Denied visits appear here with the ASN the server observed.</p>
-            </div>
-          ) : (
-            <div className="tb-asn-list">
-              {observed.map((row) => (
-                <NetworkRow
-                  key={row.asn}
-                  asn={row.asn}
-                  title={row.organization}
-                  meta="Recorded on a denied request"
-                  count={row.requests}
-                  countLabel="Denied"
-                  action={blockControl(saved.get(row.asn), save.isPending, save.isPending && save.variables?.asn === row.asn, () => save.mutate({ asn: row.asn, organization: row.organization }))}
-                />
-              ))}
-            </div>
-          )}
-        </Card>
-      </div>
+      </BlockStack>
     </Page>
   );
 }
 
-function blockControl(existing: AsnRule | undefined, pending: boolean, loading: boolean, onBlock: () => void): ReactNode {
-  if (existing?.enabled) return <span className="tb-pill tb-pill-block">Blocking</span>;
-  return <Button variant="primary" disabled={pending} loading={loading} onClick={onBlock}>Block</Button>;
+function MetricCell({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="tb-metric-cell">
+      <BlockStack gap="200">
+        <Text as="p" variant="bodySm" tone="subdued">
+          {label}
+        </Text>
+        <Text as="p" variant="headingXl" fontWeight="semibold" numeric>
+          {value.toLocaleString()}
+        </Text>
+      </BlockStack>
+    </div>
+  );
 }
 
-function NetworkRow({ asn, title, meta, count, countLabel, action }: {
-  asn: number;
-  title: string;
-  meta: string;
-  count?: number;
-  countLabel?: string;
-  action: ReactNode;
-}) {
+function NetworkIdentity({ asn, name }: { asn: number; name: string }) {
   return (
-    <div className="tb-asn-row">
-      <span className="tb-asn-id">AS{asn}</span>
-      <div className="tb-stack">
-        <strong>{title}</strong>
-        <span>{meta}</span>
-      </div>
-      <div className="tb-asn-end">
-        {count !== undefined ? <div className="tb-asn-count"><strong>{count.toLocaleString()}</strong><span>{countLabel}</span></div> : null}
-        {action}
-      </div>
-    </div>
+    <InlineStack gap="300" blockAlign="center" wrap={false}>
+      <Badge tone="info">{`AS${asn}`}</Badge>
+      <Tooltip content={name} dismissOnMouseOut>
+        <Text as="span" variant="bodyMd" fontWeight="medium" truncate>
+          {name}
+        </Text>
+      </Tooltip>
+    </InlineStack>
+  );
+}
+
+function BlockAction({
+  existing,
+  pending,
+  loading,
+  onBlock,
+}: {
+  existing: AsnRule | undefined;
+  pending: boolean;
+  loading: boolean;
+  onBlock: () => void;
+}) {
+  if (existing?.enabled) return <Badge tone="critical">Blocking</Badge>;
+  return (
+    <Button size="slim" tone="critical" disabled={pending} loading={loading} onClick={onBlock}>
+      Block
+    </Button>
   );
 }

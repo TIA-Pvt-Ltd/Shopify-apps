@@ -1,7 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Banner, BlockStack, Button, Card, InlineStack, Page, Select, SkeletonBodyText, Text } from "@shopify/polaris";
+import {
+  Badge,
+  Banner,
+  BlockStack,
+  Box,
+  Card,
+  Divider,
+  InlineGrid,
+  InlineStack,
+  Layout,
+  Page,
+  Select,
+  SkeletonBodyText,
+  Text,
+  type BadgeProps,
+} from "@shopify/polaris";
 import { api } from "../api";
+import { useSaveBar } from "../saveBar";
 
 const ACTIONS = [
   { label: "Allow", value: "allow" },
@@ -23,6 +39,7 @@ const NETWORKS = [
 ] as const;
 
 type PolicyKey = (typeof BOTS)[number][0] | (typeof NETWORKS)[number][0];
+type Policy = Record<PolicyKey, string>;
 
 interface DetectionStatus {
   vpnCidrs?: number;
@@ -36,7 +53,7 @@ interface DetectionStatus {
   datacenterReady?: boolean;
 }
 
-const DEFAULTS: Record<PolicyKey, string> = {
+const DEFAULTS: Policy = {
   unknownBotAction: "monitor",
   maliciousBotAction: "block",
   datacenterAction: "monitor",
@@ -45,21 +62,43 @@ const DEFAULTS: Record<PolicyKey, string> = {
   torAction: "challenge",
 };
 
+function actionBadgeTone(action: string): BadgeProps["tone"] {
+  if (action === "block") return "critical";
+  if (action === "challenge") return "warning";
+  if (action === "monitor") return "info";
+  return "success";
+}
+
+function actionLabel(action: string): string {
+  return ACTIONS.find((option) => option.value === action)?.label ?? action;
+}
+
+function policyFromData(data: Record<string, unknown> | undefined): Policy {
+  return {
+    unknownBotAction: String(data?.unknownBotAction ?? DEFAULTS.unknownBotAction),
+    maliciousBotAction: String(data?.maliciousBotAction ?? DEFAULTS.maliciousBotAction),
+    datacenterAction: String(data?.datacenterAction ?? DEFAULTS.datacenterAction),
+    vpnAction: String(data?.vpnAction ?? DEFAULTS.vpnAction),
+    proxyAction: String(data?.proxyAction ?? DEFAULTS.proxyAction),
+    torAction: String(data?.torAction ?? DEFAULTS.torAction),
+  };
+}
+
 export function BotsPage({ notify }: { notify: (message: string) => void }) {
   const client = useQueryClient();
   const query = useQuery({ queryKey: ["bots"], queryFn: () => api<Record<string, unknown>>("/api/v1/bots/settings") });
-  const [policy, setPolicy] = useState(DEFAULTS);
+  const [policy, setPolicy] = useState<Policy>(DEFAULTS);
+  const [savedPolicy, setSavedPolicy] = useState<Policy>(DEFAULTS);
+
   useEffect(() => {
     if (!query.data) return;
-    setPolicy({
-      unknownBotAction: String(query.data.unknownBotAction ?? DEFAULTS.unknownBotAction),
-      maliciousBotAction: String(query.data.maliciousBotAction ?? DEFAULTS.maliciousBotAction),
-      datacenterAction: String(query.data.datacenterAction ?? DEFAULTS.datacenterAction),
-      vpnAction: String(query.data.vpnAction ?? DEFAULTS.vpnAction),
-      proxyAction: String(query.data.proxyAction ?? DEFAULTS.proxyAction),
-      torAction: String(query.data.torAction ?? DEFAULTS.torAction),
-    });
+    const next = policyFromData(query.data);
+    setPolicy(next);
+    setSavedPolicy(next);
   }, [query.data]);
+
+  const dirty = useMemo(() => (Object.keys(policy) as PolicyKey[]).some((key) => policy[key] !== savedPolicy[key]), [policy, savedPolicy]);
+
   const save = useMutation({
     mutationFn: () => api("/api/v1/bots/settings", {
       method: "PUT",
@@ -73,12 +112,14 @@ export function BotsPage({ notify }: { notify: (message: string) => void }) {
       }),
     }),
     onSuccess: () => {
+      setSavedPolicy(policy);
       void client.invalidateQueries({ queryKey: ["bots"] });
       notify("Protection policy saved");
       save.reset();
     },
     onError: (error: Error) => notify(error.message),
   });
+
   const detection = (query.data?.detection ?? {}) as DetectionStatus;
   const deniedSignals = useMemo(() => {
     const labels: string[] = [];
@@ -88,6 +129,7 @@ export function BotsPage({ notify }: { notify: (message: string) => void }) {
     if (policy.datacenterAction === "block") labels.push("Datacenter");
     return labels;
   }, [policy]);
+
   const inactiveFeeds = useMemo(() => {
     const issues: string[] = [];
     if (policy.proxyAction !== "allow" && !detection.proxyReady) {
@@ -104,66 +146,192 @@ export function BotsPage({ notify }: { notify: (message: string) => void }) {
     }
     return issues;
   }, [policy, detection]);
+
+  const readiness = [
+    { label: "VPN ranges", value: detection.vpnCidrs ?? 0, ready: Boolean(detection.vpnReady) },
+    { label: "VPN ASNs", value: detection.vpnAsns ?? 0, ready: Boolean(detection.vpnReady) },
+    { label: "Proxy ranges", value: detection.proxyCidrs ?? 0, ready: Boolean(detection.proxyReady) },
+    { label: "Tor ranges", value: detection.torCidrs ?? 0, ready: Boolean(detection.torReady) },
+    { label: "Hosting ASNs", value: detection.hostingAsns ?? 0, ready: Boolean(detection.datacenterReady) },
+  ];
+
+  const { saveBar } = useSaveBar({
+    id: "bots-policy-save-bar",
+    dirty: dirty && !query.isLoading && !query.isError,
+    saving: save.isPending,
+    message: "Unsaved bot protection changes",
+    onSave: () => save.mutate(),
+    onDiscard: () => setPolicy(savedPolicy),
+  });
+
   return (
-    <Page title="Bot protection" subtitle="Crawlers are trusted only after DNS or a published CIDR check. A user-agent string is never enough.">
-      <BlockStack gap="400">
-        {query.isError ? <Banner tone="critical" title={query.error instanceof Error ? query.error.message : "Bot policy could not be loaded"} /> : null}
-        <Banner tone={deniedSignals.length ? "warning" : "info"} title={deniedSignals.length ? `${deniedSignals.join(", ")} set to Block` : "Network signals use their own actions"}>
-          {deniedSignals.length
-            ? "Only traffic that matches those signals is denied. A normal residential connection still opens the store."
-            : "Monitor records the visit and still opens the store. Block denies matching traffic only."}
-        </Banner>
-        {inactiveFeeds.map((message) => (
-          <Banner key={message} tone="critical" title="Detection feed missing">
-            <p>{message}</p>
-          </Banner>
-        ))}
-        {query.isLoading ? <Card><SkeletonBodyText lines={8} /></Card> : (
-          <>
+    <Page
+      title="Bot protection"
+      subtitle="Decide how unverified automation and network signals are handled. Verified crawlers still require DNS or a published CIDR."
+    >
+      {saveBar}
+      <Layout>
+        <Layout.Section>
+          <BlockStack gap="400">
+            {query.isError ? (
+              <Banner tone="critical" title={query.error instanceof Error ? query.error.message : "Bot policy could not be loaded"} />
+            ) : null}
+
+            {query.isLoading ? (
+              <Card>
+                <SkeletonBodyText lines={10} />
+              </Card>
+            ) : (
+              <>
+                <Banner
+                  tone={deniedSignals.length ? "warning" : "info"}
+                  title={deniedSignals.length ? `${deniedSignals.join(", ")} set to Block` : "No network signals are set to Block"}
+                >
+                  <p>
+                    {deniedSignals.length
+                      ? "Only traffic that matches those signals is denied. A normal residential connection still opens the store."
+                      : "Monitor records the visit and still opens the store. Block denies matching traffic only."}
+                  </p>
+                </Banner>
+
+                {inactiveFeeds.map((message) => (
+                  <Banner key={message} tone="critical" title="Detection feed missing">
+                    <p>{message}</p>
+                  </Banner>
+                ))}
+
+                <Card>
+                  <BlockStack gap="400">
+                    <BlockStack gap="100">
+                      <Text as="h2" variant="headingMd">Detection readiness</Text>
+                      <Text as="p" tone="subdued" variant="bodySm">
+                        Feeds power VPN, proxy, Tor, and datacenter decisions. Empty feeds mean those actions never match.
+                      </Text>
+                    </BlockStack>
+                    <InlineGrid columns={{ xs: 1, sm: 2, md: 3, lg: 5 }} gap="300">
+                      {readiness.map((item) => (
+                        <Box key={item.label} background="bg-surface-secondary" borderRadius="200" padding="300">
+                          <BlockStack gap="200">
+                            <InlineStack align="space-between" blockAlign="center" wrap={false} gap="200">
+                              <Text as="span" variant="bodySm" tone="subdued">{item.label}</Text>
+                              <Badge tone={item.ready ? "success" : "attention"}>{item.ready ? "Ready" : "Empty"}</Badge>
+                            </InlineStack>
+                            <Text as="p" variant="headingLg">{item.value.toLocaleString()}</Text>
+                          </BlockStack>
+                        </Box>
+                      ))}
+                    </InlineGrid>
+                  </BlockStack>
+                </Card>
+
+                <PolicyCard
+                  title="Automation"
+                  description="How to treat clients that look automated but are not verified search or AI crawlers."
+                  rows={BOTS}
+                  policy={policy}
+                  onChange={(key, value) => setPolicy({ ...policy, [key]: value })}
+                />
+
+                <PolicyCard
+                  title="Network traffic"
+                  description="Separate signals from hosting providers, VPN exits, proxies, and Tor. These are not the same as bot classification."
+                  rows={NETWORKS}
+                  policy={policy}
+                  onChange={(key, value) => setPolicy({ ...policy, [key]: value })}
+                />
+              </>
+            )}
+          </BlockStack>
+        </Layout.Section>
+
+        <Layout.Section variant="oneThird">
+          <BlockStack gap="400">
             <Card>
-              <BlockStack gap="200">
-                <Text as="h2" variant="headingMd">Detection readiness</Text>
-                <p>
-                  VPN ranges: {(detection.vpnCidrs ?? 0).toLocaleString()} · VPN ASNs: {detection.vpnAsns ?? 0} ·
-                  Proxy ranges: {(detection.proxyCidrs ?? 0).toLocaleString()} · Tor ranges: {(detection.torCidrs ?? 0).toLocaleString()} ·
-                  Hosting ASNs: {detection.hostingAsns ?? 0}
-                </p>
+              <BlockStack gap="300">
+                <Text as="h2" variant="headingMd">What each action does</Text>
+                <ActionGuide tone="success" label="Allow" detail="Matching traffic continues into the storefront." />
+                <Divider />
+                <ActionGuide tone="info" label="Monitor" detail="Record the visit for analytics, then allow the shopper." />
+                <Divider />
+                <ActionGuide tone="warning" label="Challenge" detail="Ask for an extra check before the store opens." />
+                <Divider />
+                <ActionGuide tone="critical" label="Block" detail="Deny matching traffic before pixels and analytics fire." />
               </BlockStack>
             </Card>
-            <PolicyCard title="Automation" rows={BOTS} policy={policy} onChange={(key, value) => setPolicy({ ...policy, [key]: value })} />
-            <PolicyCard title="Network traffic" rows={NETWORKS} policy={policy} onChange={(key, value) => setPolicy({ ...policy, [key]: value })} />
-            <InlineStack align="end">
-              <Button variant="primary" loading={save.isPending} onClick={() => save.mutate()}>Save policy</Button>
-            </InlineStack>
-          </>
-        )}
-      </BlockStack>
+            <Card>
+              <BlockStack gap="200">
+                <Text as="h2" variant="headingMd">Trusted crawlers</Text>
+                <Text as="p" tone="subdued">
+                  A user-agent string is never enough. Published crawlers are trusted only after DNS or CIDR verification.
+                </Text>
+              </BlockStack>
+            </Card>
+          </BlockStack>
+        </Layout.Section>
+      </Layout>
     </Page>
   );
 }
 
-function PolicyCard({ title, rows, policy, onChange }: {
+function PolicyCard({
+  title,
+  description,
+  rows,
+  policy,
+  onChange,
+}: {
   title: string;
+  description: string;
   rows: ReadonlyArray<readonly [PolicyKey, string, string]>;
-  policy: Record<PolicyKey, string>;
+  policy: Policy;
   onChange: (key: PolicyKey, value: string) => void;
 }) {
   return (
     <Card>
-      <BlockStack gap="300">
-        <Text as="h2" variant="headingMd">{title}</Text>
-        <div>
-          {rows.map(([key, label, detail]) => (
-            <div className="tb-setting" key={key}>
-              <div>
-                <strong>{label}</strong>
-                <p>{detail}</p>
-              </div>
-              <Select label={label} labelHidden options={ACTIONS} value={policy[key]} onChange={(value) => onChange(key, value)} />
-            </div>
+      <BlockStack gap="400">
+        <BlockStack gap="100">
+          <Text as="h2" variant="headingMd">{title}</Text>
+          <Text as="p" tone="subdued" variant="bodySm">{description}</Text>
+        </BlockStack>
+        <BlockStack gap="0">
+          {rows.map(([key, label, detail], index) => (
+            <Box key={key} paddingBlockStart={index === 0 ? "0" : "400"} paddingBlockEnd={index === rows.length - 1 ? "0" : "400"}>
+              {index > 0 ? (
+                <Box paddingBlockEnd="400">
+                  <Divider />
+                </Box>
+              ) : null}
+              <InlineGrid columns={{ xs: 1, md: ["twoThirds", "oneThird"] }} gap="400">
+                <BlockStack gap="100">
+                  <InlineStack gap="200" blockAlign="center" wrap>
+                    <Text as="h3" variant="headingSm">{label}</Text>
+                    <Badge tone={actionBadgeTone(policy[key])}>{actionLabel(policy[key])}</Badge>
+                  </InlineStack>
+                  <Text as="p" tone="subdued" variant="bodySm">{detail}</Text>
+                </BlockStack>
+                <Select
+                  label="Action"
+                  labelHidden
+                  options={ACTIONS}
+                  value={policy[key]}
+                  onChange={(value) => onChange(key, value)}
+                />
+              </InlineGrid>
+            </Box>
           ))}
-        </div>
+        </BlockStack>
       </BlockStack>
     </Card>
+  );
+}
+
+function ActionGuide({ tone, label, detail }: { tone: BadgeProps["tone"]; label: string; detail: string }) {
+  return (
+    <InlineStack gap="300" blockAlign="start" wrap={false}>
+      <div style={{ minWidth: 88 }}>
+        <Badge tone={tone}>{label}</Badge>
+      </div>
+      <Text as="p" tone="subdued" variant="bodySm">{detail}</Text>
+    </InlineStack>
   );
 }
