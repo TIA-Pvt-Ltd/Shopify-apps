@@ -220,10 +220,10 @@
       showBlocked(data.blockedPageHtml || fallbackPage());
       return;
     }
-    if (data.action === "challenge" && data.challengeNonce) {
+    if (data.action === "challenge") {
       blocked = false;
       reveal(false);
-      if (!challengeShown) {
+      if (data.challengeNonce && !challengeShown) {
         challengeShown = true;
         showChallenge(endpoint, shop, data.challengeNonce);
       }
@@ -254,10 +254,17 @@
       document.write(payload);
       document.close();
     } catch (error) {
+      // document.write can fail under CSP / sandboxed embeds. Clear the hold so the
+      // restriction page is visible instead of a permanent blank dark screen.
       var root = document.documentElement;
-      root.classList.add("tb-decided", "tb-blocked", "tb-hold");
-      while (root.firstChild) root.removeChild(root.firstChild);
-      root.insertAdjacentHTML("afterbegin", payload);
+      root.classList.remove("tb-hold");
+      root.classList.add("tb-decided", "tb-blocked");
+      try {
+        document.body.innerHTML = payload;
+        document.body.style.cssText = "margin:0;min-height:100vh;display:grid;place-items:center;background:#0f172a;color:#f8fafc;font-family:sans-serif";
+      } catch (innerError) {
+        root.innerHTML = payload;
+      }
     }
   }
 

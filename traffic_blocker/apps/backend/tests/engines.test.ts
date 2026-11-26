@@ -108,6 +108,24 @@ describe("rule precedence", () => {
     const bypass = evaluate(ruleset({ vpnAction: "block", datacenterAction: "monitor" }), { ...baseInput, vpn: true, datacenter: true });
     expect(bypass.action).toBe("block");
     expect(bypass.reason).toBe("vpn_detected");
+    const vpnChallenge = evaluate(
+      ruleset({ vpnAction: "challenge", datacenterAction: "block", proxyAction: "block" }),
+      { ...baseInput, vpn: true, datacenter: true, proxy: true },
+    );
+    expect(vpnChallenge.action).toBe("challenge");
+    expect(vpnChallenge.reason).toBe("vpn_detected");
+    const datacenterOnly = evaluate(
+      ruleset({ vpnAction: "challenge", datacenterAction: "block" }),
+      { ...baseInput, vpn: false, datacenter: true },
+    );
+    expect(datacenterOnly.action).toBe("block");
+    expect(datacenterOnly.reason).toBe("datacenter_network");
+    const vpnAllowFallsThrough = evaluate(
+      ruleset({ vpnAction: "allow", datacenterAction: "block" }),
+      { ...baseInput, vpn: true, datacenter: true },
+    );
+    expect(vpnAllowFallsThrough.action).toBe("block");
+    expect(vpnAllowFallsThrough.reason).toBe("datacenter_network");
   });
 
   it("lets an allowlist override country and IP blocks only when configured", () => {

@@ -236,7 +236,9 @@ function allowlisted(ruleset: CompiledRuleset, input: EvaluationInput): Compiled
  * 5. ASN block.
  * 6. Country block.
  * 7. Bot policy. VPN usage is not a bot signal.
- * 8. Datacenter, Tor, proxy, then VPN policy.
+ * 8. Network policy by specificity: Tor → VPN → Proxy → Datacenter.
+ *    Overlapping signals (VPN exits that are also hosting ASNs) use the more
+ *    specific configured action, so VPN Challenge is not swallowed by Datacenter Block.
  * 9. Rate limit, after exempt IPs and paths.
  * 10. Default allow.
  */
@@ -324,21 +326,20 @@ export function evaluate(ruleset: CompiledRuleset, input: EvaluationInput): Eval
 }
 
 function networkPolicy(ruleset: CompiledRuleset, input: EvaluationInput): Evaluation | null {
+  // Most-specific network identity first. Commercial VPN/proxy/Tor exits often also
+  // look like hosting ASNs; merchants configure those rows separately and expect the
+  // specific signal to win (e.g. VPN Challenge over Datacenter Block).
   const checks: Array<[boolean, Action, string]> = [
-    [input.datacenter, ruleset.datacenterAction, "datacenter_network"],
     [input.tor, ruleset.torAction, "tor_exit"],
-    [input.proxy, ruleset.proxyAction, "proxy_detected"],
     [input.vpn, ruleset.vpnAction, "vpn_detected"],
+    [input.proxy, ruleset.proxyAction, "proxy_detected"],
+    [input.datacenter, ruleset.datacenterAction, "datacenter_network"],
   ];
-  let selected: Evaluation | null = null;
   for (const [matched, action, reason] of checks) {
     if (!matched || action === "allow") continue;
-    const candidate: Evaluation = { action, reason, layer: "vpn_proxy_policy", conflict: false };
-    if (!selected || ACTION_RESTRICTIVENESS.indexOf(action) > ACTION_RESTRICTIVENESS.indexOf(selected.action)) {
-      selected = candidate;
-    }
+    return { action, reason, layer: "vpn_proxy_policy", conflict: false };
   }
-  return selected;
+  return null;
 }
 
 function rateExempt(ruleset: CompiledRuleset, input: EvaluationInput): boolean {

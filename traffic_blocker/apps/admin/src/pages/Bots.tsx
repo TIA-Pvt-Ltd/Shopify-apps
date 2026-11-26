@@ -32,10 +32,10 @@ const BOTS = [
 ] as const;
 
 const NETWORKS = [
-  ["datacenterAction", "Datacenter networks", "Traffic from a hosting provider rather than a residential connection."],
-  ["vpnAction", "VPN", "Commercial VPN exits. A VPN signal is separate from malicious automation."],
-  ["proxyAction", "Proxy", "Requests that arrive through a proxy."],
-  ["torAction", "Tor", "Traffic from the Tor network."],
+  ["datacenterAction", "Datacenter networks", "Hosting ASNs that are not also tagged as VPN, proxy, or Tor. Those more specific signals use their own actions first."],
+  ["vpnAction", "VPN", "Commercial VPN exits. When an exit is also a hosting ASN, this VPN action is used (not Datacenter)."],
+  ["proxyAction", "Proxy", "Requests that arrive through a proxy. Takes priority over Datacenter when both match."],
+  ["torAction", "Tor", "Traffic from the Tor network. Takes priority over VPN, proxy, and Datacenter when matched."],
 ] as const;
 
 type PolicyKey = (typeof BOTS)[number][0] | (typeof NETWORKS)[number][0];
@@ -234,7 +234,7 @@ export function BotsPage({ notify }: { notify: (message: string) => void }) {
 
                 <PolicyCard
                   title="Network traffic"
-                  description="Separate signals from hosting providers, VPN exits, proxies, and Tor. These are not the same as bot classification."
+                  description="Separate signals from hosting, VPN, proxy, and Tor. When more than one matches, Tor → VPN → Proxy → Datacenter decides which action applies."
                   rows={NETWORKS}
                   policy={policy}
                   onChange={(key, value) => setPolicy({ ...policy, [key]: value })}
@@ -253,9 +253,13 @@ export function BotsPage({ notify }: { notify: (message: string) => void }) {
                 <Divider />
                 <ActionGuide tone="info" label="Monitor" detail="Record the visit for analytics, then allow the shopper." />
                 <Divider />
-                <ActionGuide tone="warning" label="Challenge" detail="Ask for an extra check before the store opens." />
+                <ActionGuide tone="warning" label="Challenge" detail="Show a Continue check on the storefront before the shop opens." />
                 <Divider />
-                <ActionGuide tone="critical" label="Block" detail="Deny matching traffic before pixels and analytics fire." />
+                <ActionGuide tone="critical" label="Block" detail="Deny matching traffic and show the restriction page." />
+                <Divider />
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Network priority: Tor → VPN → Proxy → Datacenter. A VPN exit that is also hosting uses the VPN setting.
+                </Text>
               </BlockStack>
             </Card>
             <Card>
